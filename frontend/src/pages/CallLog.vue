@@ -35,9 +35,9 @@
         <div>
           <Badge
             :variant="'subtle'"
-            :theme="callLog.data.status === 'Completed' ? 'green' : 'gray'"
+            :theme="statusColorMap[callLog.data.status]"
             size="md"
-            :label="callLog.data.status"
+            :label="statusLabelMap[callLog.data.status]"
           />
         </div>
       </div>
@@ -143,14 +143,17 @@
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import DurationIcon from '@/components/Icons/DurationIcon.vue'
 import NoteModal from '@/components/Modals/NoteModal.vue'
-import { dateFormat, timeAgo, dateTooltipFormat, secondsToDuration } from '@/utils'
+import {
+  dateFormat,
+  timeAgo,
+  dateTooltipFormat,
+  secondsToDuration,
+} from '@/utils'
 import {
   TextEditor,
   Avatar,
-  FeatherIcon,
   call,
   Tooltip,
-  Badge,
   createResource,
   Breadcrumbs,
 } from 'frappe-ui'
@@ -161,7 +164,7 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const { getUser } = usersStore()
-const { contacts, getContact } = contactsStore()
+const { contacts, getContact, getLeadContact } = contactsStore()
 
 const props = defineProps({
   callLogId: {
@@ -183,8 +186,11 @@ const callLog = createResource({
     doc.duration = secondsToDuration(doc.duration)
     if (doc.type === 'Incoming') {
       doc.caller = {
-        label: getContact(doc.from)?.full_name || 'Unknown',
-        image: getContact(doc.from)?.image,
+        label:
+          getContact(doc.from)?.full_name ||
+          getLeadContact(doc.from)?.full_name ||
+          'Unknown',
+        image: getContact(doc.from)?.image || getLeadContact(doc.from)?.image,
       }
       doc.receiver = {
         label: getUser(doc.receiver).full_name,
@@ -196,8 +202,11 @@ const callLog = createResource({
         image: getUser(doc.caller).user_image,
       }
       doc.receiver = {
-        label: getContact(doc.to)?.full_name || 'Unknown',
-        image: getContact(doc.to)?.image,
+        label:
+          getContact(doc.to)?.full_name ||
+          getLeadContact(doc.to)?.full_name ||
+          'Unknown',
+        image: getContact(doc.to)?.image || getLeadContact(doc.to)?.image,
       }
     }
     return doc
@@ -236,6 +245,28 @@ const breadcrumbs = computed(() => [
     route: { name: 'Call Log', params: { callLogId: props.callLogId } },
   },
 ])
+
+const statusLabelMap = {
+  Completed: 'Completed',
+  Busy: 'Declined',
+  Failed: 'Failed',
+  Queued: 'Queued',
+  Cancelled: 'Cancelled',
+  Ringing: 'Ringing',
+  'No Answer': 'Missed Call',
+  'In Progress': 'In Progress',
+}
+
+const statusColorMap = {
+  Completed: 'green',
+  Busy: 'orange',
+  Failed: 'red',
+  Queued: 'gray',
+  Cancelled: 'gray',
+  Ringing: 'gray',
+  'No Answer': 'red',
+  'In Progress': 'blue',
+}
 </script>
 
 <style scoped>

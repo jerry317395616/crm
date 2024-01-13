@@ -1,5 +1,6 @@
 <template>
   <ListView
+    :class="$attrs.class"
     :columns="columns"
     :rows="rows"
     :options="{
@@ -86,6 +87,16 @@
     </ListRows>
     <ListSelectBanner />
   </ListView>
+  <ListFooter
+    v-if="pageLengthCount"
+    class="border-t px-5 py-2"
+    v-model="pageLengthCount"
+    :options="{
+      rowCount: options.rowCount,
+      totalCount: options.totalCount,
+    }"
+    @loadMore="emit('loadMore')"
+  />
 </template>
 
 <script setup>
@@ -100,8 +111,7 @@ import {
   ListRow,
   ListRowItem,
   ListSelectBanner,
-  FormControl,
-  Badge,
+  ListFooter,
 } from 'frappe-ui'
 
 const props = defineProps({
@@ -117,7 +127,13 @@ const props = defineProps({
     type: Object,
     default: () => ({
       selectable: true,
+      totalCount: 0,
+      rowCount: 0,
     }),
   },
 })
+
+const emit = defineEmits(['loadMore'])
+
+const pageLengthCount = defineModel()
 </script>

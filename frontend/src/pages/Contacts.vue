@@ -9,11 +9,21 @@
       </Button>
     </template>
   </LayoutHeader>
-  <ViewControls v-model="contacts" doctype="Contact" />
+  <ViewControls
+    v-model="contacts"
+    v-model:loadMore="loadMore"
+    doctype="Contact"
+  />
   <ContactsListView
     v-if="contacts.data && rows.length"
+    v-model="contacts.data.page_length_count"
     :rows="rows"
     :columns="contacts.data.columns"
+    :options="{
+      rowCount: contacts.data.row_count,
+      totalCount: contacts.data.total_count,
+    }"
+    @loadMore="() => loadMore++"
   />
   <div
     v-else-if="contacts.data"
@@ -38,7 +48,7 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
 import ContactsListView from '@/components/ListViews/ContactsListView.vue'
 import ViewControls from '@/components/ViewControls.vue'
-import { FeatherIcon, Breadcrumbs } from 'frappe-ui'
+import { Breadcrumbs } from 'frappe-ui'
 import { organizationsStore } from '@/stores/organizations.js'
 import { dateFormat, dateTooltipFormat, timeAgo } from '@/utils'
 import { ref, computed } from 'vue'
@@ -68,7 +78,9 @@ const breadcrumbs = computed(() => {
   return items
 })
 
+// contacts data is loaded in the ViewControls component
 const contacts = ref({})
+const loadMore = ref(1)
 
 const rows = computed(() => {
   if (!contacts.value?.data?.data) return []

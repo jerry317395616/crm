@@ -13,11 +13,21 @@
       </Button>
     </template>
   </LayoutHeader>
-  <ViewControls v-model="organizations" doctype="CRM Organization" />
+  <ViewControls
+    v-model="organizations"
+    v-model:loadMore="loadMore"
+    doctype="CRM Organization"
+  />
   <OrganizationsListView
     v-if="organizations.data && rows.length"
+    v-model="organizations.data.page_length_count"
     :rows="rows"
     :columns="organizations.data.columns"
+    :options="{
+      rowCount: organizations.data.row_count,
+      totalCount: organizations.data.total_count,
+    }"
+    @loadMore="() => loadMore++"
   />
   <div
     v-else-if="organizations.data"
@@ -41,7 +51,7 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import OrganizationsListView from '@/components/ListViews/OrganizationsListView.vue'
 import ViewControls from '@/components/ViewControls.vue'
-import { FeatherIcon, Breadcrumbs } from 'frappe-ui'
+import { Breadcrumbs } from 'frappe-ui'
 import {
   dateFormat,
   dateTooltipFormat,
@@ -74,7 +84,9 @@ const breadcrumbs = computed(() => {
   return items
 })
 
+// organizations data is loaded in the ViewControls component
 const organizations = ref({})
+const loadMore = ref(1)
 
 const rows = computed(() => {
   if (!organizations.value?.data?.data) return []

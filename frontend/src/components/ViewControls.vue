@@ -33,7 +33,7 @@
           @update="updateFilter"
         />
         <SortBy v-model="list" :doctype="doctype" @update="updateSort" />
-        <ViewSettings
+        <ColumnSettings
           v-model="list"
           :doctype="doctype"
           @update="(isDefault) => updateColumns(isDefault)"
@@ -50,35 +50,34 @@
   </div>
   <ViewModal
     :doctype="doctype"
-    :view="view"
     :options="{
-      afterCreate: (v) => {
+      afterCreate: async (v) => {
+        await reloadView()
         viewUpdated = false
         router.push({ name: route.name, query: { view: v.name } })
       },
-      afterUpdate: (v) => {
+      afterUpdate: () => {
         viewUpdated = false
-        currentView = {
-          label: v.label,
-          icon: v.icon || 'list',
-        }
+        reloadView()
       },
     }"
+    v-model:view="view"
     v-model="showViewModal"
   />
 </template>
 <script setup>
+import EditIcon from '@/components/Icons/EditIcon.vue'
 import DuplicateIcon from '@/components/Icons/DuplicateIcon.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
 import UnpinIcon from '@/components/Icons/UnpinIcon.vue'
 import ViewModal from '@/components/Modals/ViewModal.vue'
 import SortBy from '@/components/SortBy.vue'
 import Filter from '@/components/Filter.vue'
-import ViewSettings from '@/components/ViewSettings.vue'
+import ColumnSettings from '@/components/ColumnSettings.vue'
 import { globalStore } from '@/stores/global'
 import { viewsStore } from '@/stores/views'
 import { useDebounceFn } from '@vueuse/core'
-import { createResource, FeatherIcon, Dropdown, call } from 'frappe-ui'
+import { createResource, Dropdown, call } from 'frappe-ui'
 import { computed, ref, defineModel, onMounted, watch, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
@@ -97,6 +96,7 @@ const { $dialog } = globalStore()
 const { reload: reloadView, getView } = viewsStore()
 
 const list = defineModel()
+const loadMore = defineModel('loadMore')
 
 const route = useRoute()
 const router = useRouter()
@@ -117,17 +117,33 @@ const currentView = computed(() => {
 const view = ref({
   name: '',
   label: '',
-  filters: props.filters,
+  filters: {},
   order_by: 'modified desc',
   columns: '',
   rows: '',
-  default_columns: false,
+  load_default_columns: false,
   pinned: false,
 })
 
+const pageLength = computed(() => list.value?.data?.page_length)
+const pageLengthCount = computed(() => list.value?.data?.page_length_count)
+
+watch(loadMore, (value) => {
+  if (!value) return
+  updatePageLength(value, true)
+})
+
+watch(
+  () => list.value?.data?.page_length_count,
+  (value) => {
+    if (!value) return
+    updatePageLength(value)
+  }
+)
+
 function getParams() {
   let _view = getView(route.query.view)
-  const filters = (_view?.filters && JSON.parse(_view.filters)) || props.filters
+  const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
   const columns = _view?.columns || ''
   const rows = _view?.rows || ''
@@ -141,19 +157,19 @@ function getParams() {
       columns: _view.columns,
       rows: _view.rows,
       route_name: _view.route_name,
-      default_columns: _view.row,
+      load_default_columns: _view.row,
       pinned: _view.pinned,
     }
   } else {
     view.value = {
       name: '',
       label: '',
-      filters: props.filters,
+      filters: {},
       order_by: 'modified desc',
       columns: '',
       rows: '',
       route_name: '',
-      default_columns: true,
+      load_default_columns: true,
       pinned: false,
     }
   }
@@ -164,7 +180,10 @@ function getParams() {
     order_by: order_by,
     columns: columns,
     rows: rows,
+    page_length: pageLength.value,
+    page_length_count: pageLengthCount.value,
     custom_view_name: _view?.name || '',
+    default_filters: props.filters,
   }
 }
 
@@ -173,7 +192,19 @@ list.value = createResource({
   params: getParams(),
   cache: [props.doctype, route.query.view],
   onSuccess(data) {
-    setupDefaults(data)
+    let cv = getView(route.query.view)
+
+    defaultParams.value = {
+      doctype: props.doctype,
+      filters: list.value.params.filters,
+      order_by: list.value.params.order_by,
+      page_length: list.value.params.page_length,
+      page_length_count: list.value.params.page_length_count,
+      columns: data.columns,
+      rows: data.rows,
+      custom_view_name: cv?.name || '',
+      default_filters: props.filters,
+    }
   },
 })
 
@@ -236,19 +267,6 @@ const viewsDropdownOptions = computed(() => {
   return _views
 })
 
-function setupDefaults(data) {
-  let cv = getView(route.query.view)
-
-  defaultParams.value = {
-    doctype: props.doctype,
-    filters: list.value.params.filters,
-    order_by: list.value.params.order_by,
-    columns: data.columns,
-    rows: data.rows,
-    custom_view_name: cv?.name || '',
-  }
-}
-
 function updateFilter(filters) {
   viewUpdated.value = true
   if (!defaultParams.value) {
@@ -256,6 +274,7 @@ function updateFilter(filters) {
   }
   list.value.params = defaultParams.value
   list.value.params.filters = filters
+  view.value.filters = filters
   list.value.reload()
 }
 
@@ -266,13 +285,16 @@ function updateSort(order_by) {
   }
   list.value.params = defaultParams.value
   list.value.params.order_by = order_by
+  view.value.order_by = order_by
   list.value.reload()
 }
 
 function updateColumns(obj) {
-  defaultParams.value.columns = obj.isDefault ? '' : obj.columns
-  defaultParams.value.rows = obj.isDefault ? '' : obj.rows
-  view.value.default_columns = obj.isDefault
+  defaultParams.value.columns = view.value.columns = obj.isDefault
+    ? ''
+    : obj.columns
+  defaultParams.value.rows = view.value.rows = obj.isDefault ? '' : obj.rows
+  view.value.load_default_columns = obj.isDefault
 
   if (obj.reset) {
     defaultParams.value.columns = getParams().columns
@@ -286,9 +308,23 @@ function updateColumns(obj) {
   viewUpdated.value = true
 }
 
+function updatePageLength(value, loadMore = false) {
+  if (!defaultParams.value) {
+    defaultParams.value = getParams()
+  }
+  list.value.params = defaultParams.value
+  if (loadMore) {
+    list.value.params.page_length += list.value.params.page_length_count
+  } else {
+    list.value.params.page_length = value
+    list.value.params.page_length_count = value
+  }
+  list.value.reload()
+}
+
 // View Actions
 const viewActions = computed(() => {
-  let o = [
+  let actions = [
     {
       group: 'Default Views',
       hideLabel: true,
@@ -296,33 +332,28 @@ const viewActions = computed(() => {
         {
           label: 'Duplicate',
           icon: () => h(DuplicateIcon, { class: 'h-4 w-4' }),
-          onClick: () => {
-            view.value.name = ''
-            view.value.label = view.value.label + ' New'
-            showViewModal.value = true
-          },
+          onClick: () => duplicateView(),
         },
       ],
     },
   ]
 
   if (route.query.view) {
-    o[0].items.push({
-      label: view.value.pinned ? 'Unpin View' : 'Pin View',
-      icon: () =>
-        h(view.value.pinned ? UnpinIcon : PinIcon, { class: 'h-4 w-4' }),
-      onClick: () => {
-        call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin', {
-          name: route.query.view,
-          value: !view.value.pinned,
-        }).then(() => {
-          view.value.pinned = !view.value.pinned
-          reloadView()
-        })
+    actions[0].items.push(
+      {
+        label: 'Rename',
+        icon: () => h(EditIcon, { class: 'h-4 w-4' }),
+        onClick: () => renameView(),
       },
-    })
+      {
+        label: view.value.pinned ? 'Unpin View' : 'Pin View',
+        icon: () =>
+          h(view.value.pinned ? UnpinIcon : PinIcon, { class: 'h-4 w-4' }),
+        onClick: () => pinView(),
+      }
+    )
 
-    o.push({
+    actions.push({
       group: 'Delete View',
       hideLabel: true,
       items: [
@@ -339,18 +370,7 @@ const viewActions = computed(() => {
                   label: 'Delete',
                   variant: 'solid',
                   theme: 'red',
-                  onClick: (close) => {
-                    close()
-                    call(
-                      'crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete',
-                      {
-                        name: route.query.view,
-                      }
-                    ).then(() => {
-                      router.push({ name: route.name })
-                      reloadView()
-                    })
-                  },
+                  onClick: (close) => deleteView(close),
                 },
               ],
             }),
@@ -358,8 +378,40 @@ const viewActions = computed(() => {
       ],
     })
   }
-  return o
+  return actions
 })
+
+function duplicateView() {
+  view.value.name = ''
+  view.value.label = getView(route.query.view).label + ' New'
+  showViewModal.value = true
+}
+
+function renameView() {
+  view.value.name = route.query.view
+  view.value.label = getView(route.query.view).label
+  showViewModal.value = true
+}
+
+function pinView() {
+  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin', {
+    name: route.query.view,
+    value: !view.value.pinned,
+  }).then(() => {
+    view.value.pinned = !view.value.pinned
+    reloadView()
+  })
+}
+
+function deleteView(close) {
+  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete', {
+    name: route.query.view,
+  }).then(() => {
+    router.push({ name: route.name })
+    reloadView()
+  })
+  close()
+}
 
 function cancelChanges() {
   reload()
@@ -375,7 +427,7 @@ function saveView() {
     columns: defaultParams.value.columns,
     rows: defaultParams.value.rows,
     route_name: route.name,
-    default_columns: view.value.default_columns,
+    load_default_columns: view.value.load_default_columns,
   }
   showViewModal.value = true
 }

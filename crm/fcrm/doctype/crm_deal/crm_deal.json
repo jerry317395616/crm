@@ -10,6 +10,7 @@
   "organization_tab",
   "organization",
   "website",
+  "territory",
   "annual_revenue",
   "close_date",
   "probability",
@@ -18,13 +19,19 @@
   "contacts_tab",
   "email",
   "mobile_no",
+  "phone",
   "contacts",
   "others_tab",
   "naming_series",
   "status",
+  "section_break_sygz",
+  "no_of_employees",
+  "column_break_nwob",
+  "job_title",
   "section_break_eepu",
   "lead",
   "column_break_bqvs",
+  "source",
   "sla_tab",
   "sla",
   "sla_creation",
@@ -35,7 +42,9 @@
   "response_by",
   "column_break_hpvj",
   "first_response_time",
-  "first_responded_on"
+  "first_responded_on",
+  "log_tab",
+  "status_change_log"
  ],
  "fields": [
   {
@@ -50,19 +59,17 @@
    "label": "Probability"
   },
   {
-   "fetch_from": "organization.annual_revenue",
+   "fetch_from": ".annual_revenue",
    "fieldname": "annual_revenue",
    "fieldtype": "Currency",
-   "label": "Amount",
-   "read_only": 1
+   "label": "Amount"
   },
   {
-   "fetch_from": "organization.website",
+   "fetch_from": ".website",
    "fieldname": "website",
    "fieldtype": "Data",
    "label": "Website",
-   "options": "URL",
-   "read_only": 1
+   "options": "URL"
   },
   {
    "fieldname": "close_date",
@@ -208,11 +215,61 @@
    "fieldtype": "Link",
    "label": "Communication Status",
    "options": "CRM Communication Status"
+  },
+  {
+   "fetch_from": ".territory",
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "label": "Territory",
+   "options": "CRM Territory"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "label": "Source",
+   "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "no_of_employees",
+   "fieldtype": "Select",
+   "label": "No. of Employees",
+   "options": "1-10\n11-50\n51-200\n201-500\n501-1000\n1000+"
+  },
+  {
+   "fieldname": "section_break_sygz",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_nwob",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "label": "Job Title"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "log_tab",
+   "fieldtype": "Tab Break",
+   "label": "Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_change_log",
+   "fieldtype": "Table",
+   "label": "Status Change Log",
+   "options": "CRM Status Change Log"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2023-12-28 11:40:16.934256",
+ "modified": "2024-01-13 11:50:37.361190",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Deal",

@@ -66,7 +66,7 @@
                 <span class="">{{ website(organization.website) }}</span>
               </div>
               <span
-                v-if="organization.industry && organization.website"
+                v-if="organization.website"
                 class="text-3xl leading-[0] text-gray-600"
               >
                 &middot;
@@ -79,10 +79,20 @@
                 <span class="">{{ organization.industry }}</span>
               </div>
               <span
-                v-if="
-                  (organization.website || organization.industry) &&
-                  organization.annual_revenue
-                "
+                v-if="organization.industry"
+                class="text-3xl leading-[0] text-gray-600"
+              >
+                &middot;
+              </span>
+              <div
+                v-if="organization.territory"
+                class="flex items-center gap-1.5"
+              >
+                <TerritoryIcon class="h-4 w-4" />
+                <span class="">{{ organization.territory }}</span>
+              </div>
+              <span
+                v-if="organization.territory"
                 class="text-3xl leading-[0] text-gray-600"
               >
                 &middot;
@@ -95,11 +105,7 @@
                 <span class="">{{ organization.annual_revenue }}</span>
               </div>
               <span
-                v-if="
-                  organization.website ||
-                  organization.industry ||
-                  organization.annual_revenue
-                "
+                v-if="organization.annual_revenue"
                 class="text-3xl leading-[0] text-gray-600"
               >
                 &middot;
@@ -108,6 +114,7 @@
                 v-if="
                   organization.website ||
                   organization.industry ||
+                  organization.territory ||
                   organization.annual_revenue
                 "
                 variant="ghost"
@@ -165,7 +172,7 @@
     <Tabs v-model="tabIndex" :tabs="tabs">
       <template #tab="{ tab, selected }">
         <button
-          class="group -mb-px flex items-center gap-2 border-b border-transparent py-2.5 text-base text-gray-600 duration-300 ease-in-out hover:border-gray-400 hover:text-gray-900"
+          class="group flex items-center gap-2 border-b border-transparent py-2.5 text-base text-gray-600 duration-300 ease-in-out hover:border-gray-400 hover:text-gray-900"
           :class="{ 'text-gray-900': selected }"
         >
           <component v-if="tab.icon" :is="tab.icon" class="h-5" />
@@ -182,36 +189,34 @@
         </button>
       </template>
       <template #default="{ tab }">
-        <div class="flex h-full">
-          <LeadsListView
-            class="mt-4"
-            v-if="tab.label === 'Leads' && rows.length"
-            :rows="rows"
-            :columns="columns"
-            :options="{ selectable: false }"
-          />
-          <DealsListView
-            class="mt-4"
-            v-if="tab.label === 'Deals' && rows.length"
-            :rows="rows"
-            :columns="columns"
-            :options="{ selectable: false }"
-          />
-          <ContactsListView
-            class="mt-4"
-            v-if="tab.label === 'Contacts' && rows.length"
-            :rows="rows"
-            :columns="columns"
-            :options="{ selectable: false }"
-          />
-          <div
-            v-if="!rows.length"
-            class="grid flex-1 place-items-center text-xl font-medium text-gray-500"
-          >
-            <div class="flex flex-col items-center justify-center space-y-3">
-              <component :is="tab.icon" class="!h-10 !w-10" />
-              <div>No {{ tab.label }} Found</div>
-            </div>
+        <LeadsListView
+          class="mt-4"
+          v-if="tab.label === 'Leads' && rows.length"
+          :rows="rows"
+          :columns="columns"
+          :options="{ selectable: false }"
+        />
+        <DealsListView
+          class="mt-4"
+          v-if="tab.label === 'Deals' && rows.length"
+          :rows="rows"
+          :columns="columns"
+          :options="{ selectable: false }"
+        />
+        <ContactsListView
+          class="mt-4"
+          v-if="tab.label === 'Contacts' && rows.length"
+          :rows="rows"
+          :columns="columns"
+          :options="{ selectable: false }"
+        />
+        <div
+          v-if="!rows.length"
+          class="grid flex-1 place-items-center text-xl font-medium text-gray-500"
+        >
+          <div class="flex flex-col items-center justify-center space-y-3">
+            <component :is="tab.icon" class="!h-10 !w-10" />
+            <div>No {{ tab.label }} Found</div>
           </div>
         </div>
       </template>
@@ -227,13 +232,10 @@
 <script setup>
 import {
   Breadcrumbs,
-  FeatherIcon,
   Avatar,
   FileUploader,
-  ErrorMessage,
   Dropdown,
   Tabs,
-  Badge,
   call,
   createListResource,
 } from 'frappe-ui'
@@ -243,6 +245,7 @@ import LeadsListView from '@/components/ListViews/LeadsListView.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
 import ContactsListView from '@/components/ListViews/ContactsListView.vue'
 import WebsiteIcon from '@/components/Icons/WebsiteIcon.vue'
+import TerritoryIcon from '@/components/Icons/TerritoryIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'

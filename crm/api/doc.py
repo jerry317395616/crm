@@ -56,9 +56,24 @@ def get_filterable_fields(doctype: str):
 
 
 @frappe.whitelist()
-def get_list_data(doctype: str, filters: dict, order_by: str, columns=None , rows=None, custom_view_name=None):
+def get_list_data(
+	doctype: str,
+	filters: dict,
+	order_by: str,
+	page_length=20,
+	page_length_count=20,
+	columns=None,
+	rows=None,
+	custom_view_name=None,
+	default_filters=None,
+):
 	custom_view = False
 	filters = frappe._dict(filters)
+
+	if default_filters:
+		default_filters = frappe.parse_json(default_filters)
+		filters.update(default_filters)
+
 	is_default = True
 	if columns or rows:
 		custom_view = True
@@ -97,7 +112,7 @@ def get_list_data(doctype: str, filters: dict, order_by: str, columns=None , row
 		fields=rows,
 		filters=filters,
 		order_by=order_by,
-		page_length=20,
+		page_length=page_length,
 	) or []
 
 	fields = frappe.get_meta(doctype).fields
@@ -134,15 +149,19 @@ def get_list_data(doctype: str, filters: dict, order_by: str, columns=None , row
 			fields.append(field)
 
 	if not is_default and custom_view_name:
-		is_default = frappe.db.get_value("CRM View Settings", custom_view_name, "default_columns")
+		is_default = frappe.db.get_value("CRM View Settings", custom_view_name, "load_default_columns")
 
 	return {
 		"data": data,
 		"columns": columns,
 		"rows": rows,
 		"fields": fields,
+		"page_length": page_length,
+		"page_length_count": page_length_count,
 		"is_default": is_default,
 		"views": get_views(doctype),
+		"total_count": frappe.client.get_count(doctype, filters=filters),
+		"row_count": len(data),
 	}
 
 def get_views(doctype):
@@ -188,11 +207,16 @@ def get_doctype_fields(doctype):
 		else:
 			section_fields.append(get_field_obj(field))
 
-	all_fields = []
+	section_fields = []
 	for section in sections:
-		all_fields.append(sections[section])
+		section_fields.append(sections[section])
 
-	return all_fields
+	fields = [field for field in fields if field.fieldtype not in "Tab Break"]
+	fields_meta = {}
+	for field in fields:
+		fields_meta[field.fieldname] = field
+
+	return section_fields, fields_meta
 
 
 def get_field_obj(field):
@@ -200,6 +224,9 @@ def get_field_obj(field):
 		"label": field.label,
 		"type": get_type(field),
 		"name": field.fieldname,
+		"hidden": field.hidden,
+		"reqd": field.reqd,
+		"read_only": field.read_only,
 	}
 
 	obj["placeholder"] = "Add " + field.label + "..."

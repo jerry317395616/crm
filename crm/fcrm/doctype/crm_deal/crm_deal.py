@@ -8,6 +8,7 @@ from frappe.desk.form.assign_to import add as assign
 from frappe.model.document import Document
 
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
+from crm.fcrm.doctype.crm_status_change_log.crm_status_change_log import add_status_change_log
 
 
 class CRMDeal(Document):
@@ -17,8 +18,11 @@ class CRMDeal(Document):
 	def validate(self):
 		self.set_primary_contact()
 		self.set_primary_email_mobile_no()
+		self.update_organization()
 		if self.deal_owner and not self.is_new():
 			self.assign_agent(self.deal_owner)
+		if self.has_value_changed("status"):
+			add_status_change_log(self)
 
 	def after_insert(self):
 		if self.deal_owner:
@@ -44,6 +48,7 @@ class CRMDeal(Document):
 		if not self.contacts:
 			self.email = ""
 			self.mobile_no = ""
+			self.phone = ""
 			return
 
 		if len([contact for contact in self.contacts if contact.is_primary]) > 1:
@@ -55,11 +60,27 @@ class CRMDeal(Document):
 				primary_contact_exists = True
 				self.email = d.email.strip()
 				self.mobile_no = d.mobile_no.strip()
+				self.phone = d.phone.strip()
 				break
 
 		if not primary_contact_exists:
 			self.email = ""
 			self.mobile_no = ""
+			self.phone = ""
+
+	def update_organization(self):
+		if self.organization:
+			if self.has_value_changed("organization"):
+				organization = frappe.get_cached_doc("CRM Organization", self.organization)
+				self.website = organization.website
+				self.territory = organization.territory
+				self.annual_revenue = organization.annual_revenue
+			if self.has_value_changed("website"):
+				frappe.db.set_value("CRM Organization", self.organization, "website", self.website)
+			if self.has_value_changed("territory"):
+				frappe.db.set_value("CRM Organization", self.organization, "territory", self.territory)
+			if self.has_value_changed("annual_revenue"):
+				frappe.db.set_value("CRM Organization", self.organization, "annual_revenue", self.annual_revenue)
 
 	def assign_agent(self, agent):
 		if not agent:

@@ -4,11 +4,21 @@
       <Breadcrumbs :items="breadcrumbs" />
     </template>
   </LayoutHeader>
-  <ViewControls v-model="callLogs" doctype="CRM Call Log" />
+  <ViewControls
+    v-model="callLogs"
+    v-model:loadMore="loadMore"
+    doctype="CRM Call Log"
+  />
   <CallLogsListView
     v-if="callLogs.data && rows.length"
+    v-model="callLogs.data.page_length_count"
     :rows="rows"
     :columns="callLogs.data.columns"
+    :options="{
+      rowCount: callLogs.data.row_count,
+      totalCount: callLogs.data.total_count,
+    }"
+    @loadMore="() => loadMore++"
   />
   <div
     v-else-if="callLogs.data"
@@ -40,11 +50,13 @@ import { Breadcrumbs } from 'frappe-ui'
 import { computed, ref } from 'vue'
 
 const { getUser } = usersStore()
-const { getContact } = contactsStore()
+const { getContact, getLeadContact } = contactsStore()
 
 const breadcrumbs = [{ label: 'Call Logs', route: { name: 'Call Logs' } }]
 
+// callLogs data is loaded in the ViewControls component
 const callLogs = ref({})
+const loadMore = ref(1)
 
 const rows = computed(() => {
   if (!callLogs.value?.data?.data) return []
@@ -58,20 +70,26 @@ const rows = computed(() => {
       if (row === 'caller') {
         _rows[row] = {
           label: incoming
-            ? getContact(callLog.from)?.full_name || 'Unknown'
+            ? getContact(callLog.from)?.full_name ||
+              getLeadContact(callLog.from)?.full_name ||
+              'Unknown'
             : getUser(callLog.caller).full_name,
           image: incoming
-            ? getContact(callLog.from)?.image
+            ? getContact(callLog.from)?.image ||
+              getLeadContact(callLog.from)?.image
             : getUser(callLog.caller).user_image,
         }
       } else if (row === 'receiver') {
         _rows[row] = {
           label: incoming
             ? getUser(callLog.receiver).full_name
-            : getContact(callLog.to)?.full_name || 'Unknown',
+            : getContact(callLog.to)?.full_name ||
+              getLeadContact(callLog.to)?.full_name ||
+              'Unknown',
           image: incoming
             ? getUser(callLog.receiver).user_image
-            : getContact(callLog.to)?.image,
+            : getContact(callLog.to)?.image ||
+              getLeadContact(callLog.to)?.image,
         }
       } else if (row === 'duration') {
         _rows[row] = {
@@ -85,8 +103,8 @@ const rows = computed(() => {
         }
       } else if (row === 'status') {
         _rows[row] = {
-          label: callLog.status,
-          color: callLog.status === 'Completed' ? 'green' : 'gray',
+          label: statusLabelMap[callLog.status],
+          color: statusColorMap[callLog.status],
         }
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = {
@@ -98,4 +116,26 @@ const rows = computed(() => {
     return _rows
   })
 })
+
+const statusLabelMap = {
+  Completed: 'Completed',
+  Busy: 'Declined',
+  Failed: 'Failed',
+  Queued: 'Queued',
+  Cancelled: 'Cancelled',
+  Ringing: 'Ringing',
+  'No Answer': 'Missed Call',
+  'In Progress': 'In Progress',
+}
+
+const statusColorMap = {
+  Completed: 'green',
+  Busy: 'orange',
+  Failed: 'red',
+  Queued: 'gray',
+  Cancelled: 'gray',
+  Ringing: 'gray',
+  'No Answer': 'red',
+  'In Progress': 'blue',
+}
 </script>

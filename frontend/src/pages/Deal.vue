@@ -300,19 +300,17 @@ import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
 import {
   createResource,
-  FeatherIcon,
   Dropdown,
   Tooltip,
   Avatar,
   Tabs,
   Breadcrumbs,
   call,
-  Badge,
 } from 'frappe-ui'
 import { ref, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 
-const { $dialog } = globalStore()
+const { $dialog, makeCall } = globalStore()
 const { getContactByName, contacts } = contactsStore()
 const { organizations, getOrganization } = organizationsStore()
 const { statusOptions, getDealStatus } = statusesStore()
@@ -355,6 +353,8 @@ const organization = computed(() => {
 function updateDeal(fieldname, value, callback) {
   value = Array.isArray(fieldname) ? '' : value
 
+  if (validateRequired(fieldname, value)) return
+
   createResource({
     url: 'frappe.client.set_value',
     params: {
@@ -384,6 +384,20 @@ function updateDeal(fieldname, value, callback) {
       })
     },
   })
+}
+
+function validateRequired(fieldname, value) {
+  let meta = deal.data.all_fields || {}
+  if (meta[fieldname]?.reqd && !value) {
+    createToast({
+      title: 'Error Updating Deal',
+      text: `${meta[fieldname].label} is a required field`,
+      icon: 'x',
+      iconClasses: 'text-red-600',
+    })
+    return true
+  }
+  return false
 }
 
 const breadcrumbs = computed(() => {
@@ -428,11 +442,13 @@ const detailSections = computed(() => {
 function getParsedFields(sections, contacts) {
   sections.forEach((section) => {
     section.fields.forEach((field) => {
-      if (['website', 'annual_revenue'].includes(field.name)) {
-        field.value = organization.value?.[field.name]
-        field.tooltip =
-          'This field is read-only and is fetched from the organization'
-      } else if (field.name == 'organization') {
+      if (
+        !deal.data.organization &&
+        ['website', 'territory', 'annual_revenue'].includes(field.name)
+      ) {
+        field.hidden = true
+      }
+      if (field.name == 'organization') {
         field.create = (value, close) => {
           _organization.value.organization_name = value
           showOrganizationModal.value = true

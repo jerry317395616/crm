@@ -1,10 +1,8 @@
 <template>
   <NestedPopover>
     <template #target>
-      <Button label="View Settings">
-        <template #prefix>
-          <SettingsIcon class="h-4" />
-        </template>
+      <Button>
+        <SettingsIcon class="h-4" />
       </Button>
     </template>
     <template #body="{ close }">
@@ -142,7 +140,6 @@ import NestedPopover from '@/components/NestedPopover.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import Draggable from 'vuedraggable'
 import { computed, defineModel, ref } from 'vue'
-import { FeatherIcon, FormControl } from 'frappe-ui'
 import { watchOnce } from '@vueuse/core'
 
 const props = defineProps({
@@ -268,6 +265,7 @@ function apply(reload = false, isDefault = false, reset = false) {
   emit('update', obj)
 
   if (reload) {
+    // will have think of a better way to do this
     setTimeout(() => {
       is_default.value = reset ? oldValues.value.isDefault : isDefault
       columnsUpdated.value = !reset

@@ -11,13 +11,20 @@
   </LayoutHeader>
   <ViewControls
     v-model="leads"
+    v-model:loadMore="loadMore"
     doctype="CRM Lead"
     :filters="{ converted: 0 }"
   />
   <LeadsListView
     v-if="leads.data && rows.length"
+    v-model="leads.data.page_length_count"
     :rows="rows"
     :columns="leads.data.columns"
+    :options="{
+      rowCount: leads.data.row_count,
+      totalCount: leads.data.total_count,
+    }"
+    @loadMore="() => loadMore++"
   />
   <div v-else-if="leads.data" class="flex h-full items-center justify-center">
     <div
@@ -59,13 +66,7 @@ import { usersStore } from '@/stores/users'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
 import { dateFormat, dateTooltipFormat, timeAgo, formatTime } from '@/utils'
-import {
-  FeatherIcon,
-  Dialog,
-  Button,
-  createResource,
-  Breadcrumbs,
-} from 'frappe-ui'
+import { createResource, Breadcrumbs } from 'frappe-ui'
 import { useRouter } from 'vue-router'
 import { ref, computed, reactive } from 'vue'
 
@@ -79,6 +80,7 @@ const router = useRouter()
 
 // leads data is loaded in the ViewControls component
 const leads = ref({})
+const loadMore = ref(1)
 
 // Rows
 const rows = computed(() => {
