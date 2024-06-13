@@ -5,28 +5,38 @@ import { sessionStore } from '@/stores/session'
 const routes = [
   {
     path: '/',
-    redirect: '/leads',
+    redirect: { name: 'Leads' },
+    name: 'Home',
   },
   {
-    path: '/leads',
+    path: '/notifications',
+    name: 'Notifications',
+    component: () => import('@/pages/MobileNotification.vue'),
+  },
+  {
+    alias: '/leads',
+    path: '/leads/view/:viewType?',
     name: 'Leads',
     component: () => import('@/pages/Leads.vue'),
+    meta: { scrollPos: { top: 0, left: 0 } },
   },
   {
     path: '/leads/:leadId',
     name: 'Lead',
-    component: () => import('@/pages/Lead.vue'),
+    component: () => import(`@/pages/${handleMobileView('Lead')}.vue`),
     props: true,
   },
   {
-    path: '/deals',
+    alias: '/deals',
+    path: '/deals/view/:viewType?',
     name: 'Deals',
     component: () => import('@/pages/Deals.vue'),
+    meta: { scrollPos: { top: 0, left: 0 } },
   },
   {
     path: '/deals/:dealId',
     name: 'Deal',
-    component: () => import('@/pages/Deal.vue'),
+    component: () => import(`@/pages/${handleMobileView('Deal')}.vue`),
     props: true,
   },
   {
@@ -35,9 +45,15 @@ const routes = [
     component: () => import('@/pages/Notes.vue'),
   },
   {
+    path: '/tasks',
+    name: 'Tasks',
+    component: () => import('@/pages/Tasks.vue'),
+  },
+  {
     path: '/contacts',
     name: 'Contacts',
     component: () => import('@/pages/Contacts.vue'),
+    meta: { scrollPos: { top: 0, left: 0 } },
   },
   {
     path: '/contacts/:contactId',
@@ -49,6 +65,7 @@ const routes = [
     path: '/organizations',
     name: 'Organizations',
     component: () => import('@/pages/Organizations.vue'),
+    meta: { scrollPos: { top: 0, left: 0 } },
   },
   {
     path: '/organizations/:organizationId',
@@ -60,11 +77,18 @@ const routes = [
     path: '/call-logs',
     name: 'Call Logs',
     component: () => import('@/pages/CallLogs.vue'),
+    meta: { scrollPos: { top: 0, left: 0 } },
   },
   {
-    path: '/call-logs/:callLogId',
-    name: 'Call Log',
-    component: () => import('@/pages/CallLog.vue'),
+    path: '/email-templates',
+    name: 'Email Templates',
+    component: () => import('@/pages/EmailTemplates.vue'),
+    meta: { scrollPos: { top: 0, left: 0 } },
+  },
+  {
+    path: '/email-templates/:emailTemplateId',
+    name: 'Email Template',
+    component: () => import('@/pages/EmailTemplate.vue'),
     props: true,
   },
   {
@@ -84,16 +108,44 @@ const routes = [
   },
 ]
 
+const handleMobileView = (componentName) => {
+  return window.innerWidth < 768 ? `Mobile${componentName}` : componentName
+}
+
+const scrollBehavior = (to, from, savedPosition) => {
+  if (to.name === from.name) {
+    to.meta?.scrollPos && (to.meta.scrollPos.top = 0)
+    return { left: 0, top: 0 }
+  }
+  const scrollpos = to.meta?.scrollPos || { left: 0, top: 0 }
+
+  if (scrollpos.top > 0) {
+    setTimeout(() => {
+      let el = document.querySelector('#list-rows')
+      el.scrollTo({
+        top: scrollpos.top,
+        left: scrollpos.left,
+        behavior: 'smooth',
+      })
+    }, 300)
+  }
+}
+
 let router = createRouter({
   history: createWebHistory('/crm'),
   routes,
+  scrollBehavior,
 })
 
 router.beforeEach(async (to, from, next) => {
   const { users } = usersStore()
   const { isLoggedIn } = sessionStore()
 
-  await users.promise
+  isLoggedIn && (await users.promise)
+
+  if (from.meta?.scrollPos) {
+    from.meta.scrollPos.top = document.querySelector('#list-rows')?.scrollTop
+  }
 
   if (to.name === 'Login' && isLoggedIn) {
     next({ name: 'Leads' })

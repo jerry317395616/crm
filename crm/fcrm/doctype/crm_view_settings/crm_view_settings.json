@@ -6,11 +6,15 @@
  "engine": "InnoDB",
  "field_order": [
   "label",
+  "icon",
   "user",
+  "is_default",
   "column_break_zacm",
+  "type",
   "dt",
   "route_name",
   "pinned",
+  "public",
   "columns_tab",
   "load_default_columns",
   "columns",
@@ -18,7 +22,9 @@
   "filters_tab",
   "filters",
   "order_by_tab",
-  "order_by"
+  "order_by",
+  "group_by_tab",
+  "group_by_field"
  ],
  "fields": [
   {
@@ -97,11 +103,45 @@
    "fieldname": "load_default_columns",
    "fieldtype": "Check",
    "label": "Load Default Columns"
+  },
+  {
+   "default": "0",
+   "fieldname": "public",
+   "fieldtype": "Check",
+   "label": "Public"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "label": "Is Default"
+  },
+  {
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "Icon"
+  },
+  {
+   "default": "list",
+   "fieldname": "type",
+   "fieldtype": "Select",
+   "label": "Type",
+   "options": "list\ngroup_by"
+  },
+  {
+   "fieldname": "group_by_tab",
+   "fieldtype": "Tab Break",
+   "label": "Group By"
+  },
+  {
+   "fieldname": "group_by_field",
+   "fieldtype": "Data",
+   "label": "Group By Field"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-01-03 16:54:52.195687",
+ "modified": "2024-06-01 16:58:34.952945",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM View Settings",
@@ -116,7 +156,19 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
+   "role": "Sales User",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
    "share": 1,
    "write": 1
   }

@@ -4,88 +4,152 @@
       <Breadcrumbs :items="breadcrumbs" />
     </template>
     <template #right-header>
-      <Button variant="solid" label="Create" @click="showNewDialog = true">
+      <CustomActions
+        v-if="leadsListView?.customListActions"
+        :actions="leadsListView.customListActions"
+      />
+      <Button
+        variant="solid"
+        :label="__('Create')"
+        @click="showLeadModal = true"
+      >
         <template #prefix><FeatherIcon name="plus" class="h-4" /></template>
       </Button>
     </template>
   </LayoutHeader>
   <ViewControls
+    ref="viewControls"
     v-model="leads"
     v-model:loadMore="loadMore"
+    v-model:resizeColumn="triggerResize"
+    v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Lead"
     :filters="{ converted: 0 }"
+    :options="{
+      allowedViews: ['list', 'group_by'],
+    }"
   />
   <LeadsListView
+    ref="leadsListView"
     v-if="leads.data && rows.length"
     v-model="leads.data.page_length_count"
+    v-model:list="leads"
     :rows="rows"
     :columns="leads.data.columns"
     :options="{
+      showTooltip: false,
+      resizeColumn: true,
       rowCount: leads.data.row_count,
       totalCount: leads.data.total_count,
     }"
     @loadMore="() => loadMore++"
+    @columnWidthUpdated="() => triggerResize++"
+    @updatePageCount="(count) => (updatedPageCount = count)"
+    @applyFilter="(data) => viewControls.applyFilter(data)"
+    @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
+    @likeDoc="(data) => viewControls.likeDoc(data)"
   />
   <div v-else-if="leads.data" class="flex h-full items-center justify-center">
     <div
       class="flex flex-col items-center gap-3 text-xl font-medium text-gray-500"
     >
       <LeadsIcon class="h-10 w-10" />
-      <span>No Leads Found</span>
-      <Button label="Create" @click="showNewDialog = true">
+      <span>{{ __('No {0} Found', [__('Leads')]) }}</span>
+      <Button :label="__('Create')" @click="showLeadModal = true">
         <template #prefix><FeatherIcon name="plus" class="h-4" /></template>
       </Button>
     </div>
   </div>
-  <Dialog
-    v-model="showNewDialog"
-    :options="{
-      size: '3xl',
-      title: 'New Lead',
-      actions: [{ label: 'Save', variant: 'solid' }],
-    }"
-  >
-    <template #body-content>
-      <NewLead :newLead="newLead" />
-    </template>
-    <template #actions="{ close }">
-      <div class="flex flex-row-reverse gap-2">
-        <Button variant="solid" label="Save" @click="createNewLead(close)" />
-      </div>
-    </template>
-  </Dialog>
+  <LeadModal v-model="showLeadModal" />
 </template>
 
 <script setup>
+import CustomActions from '@/components/CustomActions.vue'
+import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import LeadsListView from '@/components/ListViews/LeadsListView.vue'
-import NewLead from '@/components/NewLead.vue'
+import LeadModal from '@/components/Modals/LeadModal.vue'
 import ViewControls from '@/components/ViewControls.vue'
 import { usersStore } from '@/stores/users'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
-import { dateFormat, dateTooltipFormat, timeAgo, formatTime } from '@/utils'
+import {
+  dateFormat,
+  dateTooltipFormat,
+  timeAgo,
+  formatTime,
+  createToast,
+} from '@/utils'
 import { createResource, Breadcrumbs } from 'frappe-ui'
-import { useRouter } from 'vue-router'
-import { ref, computed, reactive } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ref, computed, reactive, h } from 'vue'
 
-const breadcrumbs = [{ label: 'Leads', route: { name: 'Leads' } }]
+const breadcrumbs = [{ label: __('Leads'), route: { name: 'Leads' } }]
 
 const { getUser } = usersStore()
 const { getOrganization } = organizationsStore()
 const { getLeadStatus } = statusesStore()
 
 const router = useRouter()
+const route = useRoute()
+
+const leadsListView = ref(null)
+const showLeadModal = ref(false)
 
 // leads data is loaded in the ViewControls component
 const leads = ref({})
 const loadMore = ref(1)
+const triggerResize = ref(1)
+const updatedPageCount = ref(20)
+const viewControls = ref(null)
 
 // Rows
 const rows = computed(() => {
   if (!leads.value?.data?.data) return []
-  return leads.value?.data.data.map((lead) => {
+  if (route.params.viewType === 'group_by') {
+    if (!leads.value?.data.group_by_field?.name) return []
+    return getGroupedByRows(
+      leads.value?.data.data,
+      leads.value?.data.group_by_field
+    )
+  } else {
+    return parseRows(leads.value?.data.data)
+  }
+})
+
+function getGroupedByRows(listRows, groupByField) {
+  let groupedRows = []
+
+  groupByField.options?.forEach((option) => {
+    let filteredRows = []
+
+    if (!option) {
+      filteredRows = listRows.filter((row) => !row[groupByField.name])
+    } else {
+      filteredRows = listRows.filter((row) => row[groupByField.name] == option)
+    }
+
+    let groupDetail = {
+      label: groupByField.label,
+      group: option || __(' '),
+      collapsed: false,
+      rows: parseRows(filteredRows),
+    }
+    if (groupByField.name == 'status') {
+      groupDetail.icon = () =>
+        h(IndicatorIcon, {
+          class: getLeadStatus(option)?.iconColorClass,
+        })
+    }
+    groupedRows.push(groupDetail)
+  })
+
+  return groupedRows || listRows
+}
+
+function parseRows(rows) {
+  return rows.map((lead) => {
     let _rows = {}
     leads.value?.data.rows.forEach((row) => {
       _rows[row] = lead[row]
@@ -116,7 +180,7 @@ const rows = computed(() => {
             ? 'green'
             : 'orange'
         if (value == 'First Response Due') {
-          value = timeAgo(lead.response_by)
+          value = __(timeAgo(lead.response_by))
           tooltipText = dateFormat(lead.response_by, dateTooltipFormat)
           if (new Date(lead.response_by) < new Date()) {
             color = 'red'
@@ -134,6 +198,9 @@ const rows = computed(() => {
         }
       } else if (row == '_assign') {
         let assignees = JSON.parse(lead._assign) || []
+        if (!assignees.length && lead.lead_owner) {
+          assignees = [lead.lead_owner]
+        }
         _rows[row] = assignees.map((user) => ({
           name: user,
           image: getUser(user).user_image,
@@ -142,7 +209,7 @@ const rows = computed(() => {
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = {
           label: dateFormat(lead[row], dateTooltipFormat),
-          timeAgo: timeAgo(lead[row]),
+          timeAgo: __(timeAgo(lead[row])),
         }
       } else if (
         ['first_response_time', 'first_responded_on', 'response_by'].includes(
@@ -155,17 +222,14 @@ const rows = computed(() => {
           timeAgo: lead[row]
             ? row == 'first_response_time'
               ? formatTime(lead[row])
-              : timeAgo(lead[row])
+              : __(timeAgo(lead[row]))
             : '',
         }
       }
     })
     return _rows
   })
-})
-
-// New Lead
-const showNewDialog = ref(false)
+}
 
 let newLead = reactive({
   salutation: '',
@@ -196,7 +260,13 @@ function createNewLead(close) {
     .submit(newLead, {
       validate() {
         if (!newLead.first_name) {
-          return 'First name is required'
+          createToast({
+            title: __('Error creating lead'),
+            text: __('First name is required'),
+            icon: 'x',
+            iconClasses: 'text-red-600',
+          })
+          return __('First name is required')
         }
       },
       onSuccess(data) {

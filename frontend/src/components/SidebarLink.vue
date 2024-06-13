@@ -1,30 +1,40 @@
 <template>
   <button
-    class="flex h-7 cursor-pointer items-center rounded text-gray-800 duration-300 ease-in-out focus:outline-none focus:transition-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-gray-400"
+    class="flex h-7 cursor-pointer items-center rounded text-gray-700 duration-300 ease-in-out focus:outline-none focus:transition-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-gray-400"
     :class="isActive ? 'bg-white shadow-sm' : 'hover:bg-gray-100'"
     @click="handleClick"
   >
     <div
-      class="flex items-center duration-300 ease-in-out"
-      :class="isCollapsed ? 'p-1' : 'px-2 py-1'"
+      class="flex w-full items-center justify-between duration-300 ease-in-out"
+      :class="isCollapsed ? 'ml-[3px] p-1' : 'px-2 py-1'"
     >
-      <Tooltip :text="label" placement="right">
-        <slot name="icon">
-          <span class="grid h-5 w-6 flex-shrink-0 place-items-center">
-            <component :is="icon" class="h-4.5 w-4.5 text-gray-700" />
+      <div class="flex items-center truncate">
+        <Tooltip :text="label" placement="right" :disabled="!isCollapsed">
+          <slot name="icon">
+            <span class="grid flex-shrink-0 place-items-center">
+              <FeatherIcon
+                v-if="typeof icon == 'string'"
+                :name="icon"
+                class="size-4.5 text-gray-700"
+              />
+              <component v-else :is="icon" class="size-4.5 text-gray-700" />
+            </span>
+          </slot>
+        </Tooltip>
+        <Tooltip :text="label" placement="right" :disabled="isCollapsed" :hoverDelay="1.5">
+          <span
+            class="flex-1 flex-shrink-0 truncate text-base duration-300 ease-in-out"
+            :class="
+              isCollapsed
+                ? 'ml-0 w-0 overflow-hidden opacity-0'
+                : 'ml-2 w-auto opacity-100'
+            "
+          >
+            {{ label }}
           </span>
-        </slot>
-      </Tooltip>
-      <span
-        class="flex-shrink-0 text-base duration-300 ease-in-out"
-        :class="
-          isCollapsed
-            ? 'ml-0 w-0 overflow-hidden opacity-0'
-            : 'ml-2 w-auto opacity-100'
-        "
-      >
-        {{ label }}
-      </span>
+        </Tooltip>
+      </div>
+      <slot name="right" />
     </div>
   </button>
 </template>
@@ -33,6 +43,7 @@
 import { Tooltip } from 'frappe-ui'
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { isMobileView, mobileSidebarOpened } from '@/composables/settings'
 
 const router = useRouter()
 const route = useRoute()
@@ -56,10 +67,14 @@ const props = defineProps({
 })
 
 function handleClick() {
+  if (!props.to) return
   if (typeof props.to === 'object') {
     router.push(props.to)
   } else {
     router.push({ name: props.to })
+  }
+  if (isMobileView.value) {
+    mobileSidebarOpened.value = false
   }
 }
 

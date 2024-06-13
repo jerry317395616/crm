@@ -3,8 +3,10 @@
 *.egg-info
 *.swp
 __pycache__
+dev-dist
 tags
 node_modules
 crm/public/frontend
+frontend/yarn.lock
 crm/www/crm.html
 build

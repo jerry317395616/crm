@@ -1,39 +1,39 @@
 <template>
-  <LayoutHeader v-if="organization">
+  <LayoutHeader v-if="organization.doc">
     <template #left-header>
       <Breadcrumbs :items="breadcrumbs" />
     </template>
   </LayoutHeader>
-  <div v-if="organization" class="flex flex-1 flex-col overflow-hidden">
+  <div v-if="organization.doc" class="flex flex-1 flex-col overflow-hidden">
     <FileUploader
       @success="changeOrganizationImage"
       :validateFile="validateFile"
     >
       <template #default="{ openFileSelector, error }">
-        <div class="flex items-center justify-start gap-6 p-5">
+        <div class="flex items-start justify-start gap-6 p-5 sm:items-center">
           <div class="group relative h-24 w-24">
             <Avatar
               size="3xl"
-              :image="organization.organization_logo"
-              :label="organization.name"
+              :image="organization.doc.organization_logo"
+              :label="organization.doc.name"
               class="!h-24 !w-24"
             />
             <component
-              :is="organization.organization_logo ? Dropdown : 'div'"
+              :is="organization.doc.organization_logo ? Dropdown : 'div'"
               v-bind="
-                organization.organization_logo
+                organization.doc.organization_logo
                   ? {
                       options: [
                         {
                           icon: 'upload',
-                          label: organization.organization_logo
-                            ? 'Change image'
-                            : 'Upload image',
+                          label: organization.doc.organization_logo
+                            ? __('Change image')
+                            : __('Upload image'),
                           onClick: openFileSelector,
                         },
                         {
                           icon: 'trash-2',
-                          label: 'Remove image',
+                          label: __('Remove image'),
                           onClick: () => changeOrganizationImage(''),
                         },
                       ],
@@ -53,73 +53,75 @@
               </div>
             </component>
           </div>
-          <div class="flex flex-col justify-center gap-0.5">
+          <div class="flex flex-col justify-center gap-2 sm:gap-0.5">
             <div class="text-3xl font-semibold text-gray-900">
-              {{ organization.name }}
+              {{ organization.doc.name }}
             </div>
-            <div class="flex items-center gap-2 text-base text-gray-700">
+            <div
+              class="flex flex-col flex-wrap gap-3 text-base text-gray-700 sm:flex-row sm:items-center sm:gap-2"
+            >
               <div
-                v-if="organization.website"
+                v-if="organization.doc.website"
                 class="flex items-center gap-1.5"
               >
                 <WebsiteIcon class="h-4 w-4" />
-                <span class="">{{ website(organization.website) }}</span>
+                <span class="">{{ website(organization.doc.website) }}</span>
               </div>
               <span
-                v-if="organization.website"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="organization.doc.website"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
               <div
-                v-if="organization.industry"
+                v-if="organization.doc.industry"
                 class="flex items-center gap-1.5"
               >
                 <FeatherIcon name="briefcase" class="h-4 w-4" />
-                <span class="">{{ organization.industry }}</span>
+                <span class="">{{ organization.doc.industry }}</span>
               </div>
               <span
-                v-if="organization.industry"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="organization.doc.industry"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
               <div
-                v-if="organization.territory"
+                v-if="organization.doc.territory"
                 class="flex items-center gap-1.5"
               >
                 <TerritoryIcon class="h-4 w-4" />
-                <span class="">{{ organization.territory }}</span>
+                <span class="">{{ organization.doc.territory }}</span>
               </div>
               <span
-                v-if="organization.territory"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="organization.doc.territory"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
               <div
-                v-if="organization.annual_revenue"
+                v-if="organization.doc.annual_revenue"
                 class="flex items-center gap-1.5"
               >
                 <FeatherIcon name="dollar-sign" class="h-4 w-4" />
-                <span class="">{{ organization.annual_revenue }}</span>
+                <span class="">{{ organization.doc.annual_revenue }}</span>
               </div>
               <span
-                v-if="organization.annual_revenue"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="organization.doc.annual_revenue"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
               <Button
                 v-if="
-                  organization.website ||
-                  organization.industry ||
-                  organization.territory ||
-                  organization.annual_revenue
+                  organization.doc.website ||
+                  organization.doc.industry ||
+                  organization.doc.territory ||
+                  organization.doc.annual_revenue
                 "
                 variant="ghost"
-                label="More"
-                class="-ml-1 cursor-pointer hover:text-gray-900"
+                :label="__('More')"
+                class="w-fit cursor-pointer hover:text-gray-900 sm:-ml-1"
                 @click="
                   () => {
                     detailMode = true
@@ -130,7 +132,7 @@
             </div>
             <div class="mt-2 flex gap-1.5">
               <Button
-                label="Edit"
+                :label="__('Edit')"
                 size="sm"
                 @click="
                   () => {
@@ -144,7 +146,7 @@
                 </template>
               </Button>
               <Button
-                label="Delete"
+                :label="__('Delete')"
                 theme="red"
                 size="sm"
                 @click="deleteOrganization"
@@ -153,18 +155,8 @@
                   <FeatherIcon name="trash-2" class="h-4 w-4" />
                 </template>
               </Button>
-              <!-- <Button label="Add lead" size="sm">
-              <template #prefix>
-                <FeatherIcon name="plus" class="h-4 w-4" />
-              </template>
-            </Button>
-            <Button label="Add deal" size="sm">
-              <template #prefix>
-                <FeatherIcon name="plus" class="h-4 w-4" />
-              </template>
-            </Button> -->
             </div>
-            <ErrorMessage class="mt-2" :message="error" />
+            <ErrorMessage class="mt-2" :message="__(error)" />
           </div>
         </div>
       </template>
@@ -176,7 +168,7 @@
           :class="{ 'text-gray-900': selected }"
         >
           <component v-if="tab.icon" :is="tab.icon" class="h-5" />
-          {{ tab.label }}
+          {{ __(tab.label) }}
           <Badge
             class="group-hover:bg-gray-900"
             :class="[selected ? 'bg-gray-900' : 'bg-gray-600']"
@@ -189,26 +181,19 @@
         </button>
       </template>
       <template #default="{ tab }">
-        <LeadsListView
-          class="mt-4"
-          v-if="tab.label === 'Leads' && rows.length"
-          :rows="rows"
-          :columns="columns"
-          :options="{ selectable: false }"
-        />
         <DealsListView
           class="mt-4"
           v-if="tab.label === 'Deals' && rows.length"
           :rows="rows"
           :columns="columns"
-          :options="{ selectable: false }"
+          :options="{ selectable: false, showTooltip: false }"
         />
         <ContactsListView
           class="mt-4"
           v-if="tab.label === 'Contacts' && rows.length"
           :rows="rows"
           :columns="columns"
-          :options="{ selectable: false }"
+          :options="{ selectable: false, showTooltip: false }"
         />
         <div
           v-if="!rows.length"
@@ -216,7 +201,7 @@
         >
           <div class="flex flex-col items-center justify-center space-y-3">
             <component :is="tab.icon" class="!h-10 !w-10" />
-            <div>No {{ tab.label }} Found</div>
+            <div>{{ __('No {0} Found', [__(tab.label)]) }}</div>
           </div>
         </div>
       </template>
@@ -224,7 +209,7 @@
   </div>
   <OrganizationModal
     v-model="showOrganizationModal"
-    :organization="organization"
+    v-model:organization="organization"
     :options="{ detailMode }"
   />
 </template>
@@ -238,22 +223,20 @@ import {
   Tabs,
   call,
   createListResource,
+  createDocumentResource,
 } from 'frappe-ui'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
-import LeadsListView from '@/components/ListViews/LeadsListView.vue'
 import DealsListView from '@/components/ListViews/DealsListView.vue'
 import ContactsListView from '@/components/ListViews/ContactsListView.vue'
 import WebsiteIcon from '@/components/Icons/WebsiteIcon.vue'
 import TerritoryIcon from '@/components/Icons/TerritoryIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
-import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
 import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'
-import { organizationsStore } from '@/stores/organizations.js'
 import { statusesStore } from '@/stores/statuses'
 import {
   dateFormat,
@@ -272,17 +255,22 @@ const props = defineProps({
 })
 
 const { $dialog } = globalStore()
-const { organizations, getOrganization } = organizationsStore()
-const { getLeadStatus, getDealStatus } = statusesStore()
+const { getDealStatus } = statusesStore()
 const showOrganizationModal = ref(false)
 const detailMode = ref(false)
 
 const router = useRouter()
 
-const organization = computed(() => getOrganization(props.organizationId))
+const organization = createDocumentResource({
+  doctype: 'CRM Organization',
+  name: props.organizationId,
+  cache: ['organization', props.organizationId],
+  fields: ['*'],
+  auto: true,
+})
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: 'Organizations', route: { name: 'Organizations' } }]
+  let items = [{ label: __('Organizations'), route: { name: 'Organizations' } }]
   items.push({
     label: props.organizationId,
     route: {
@@ -296,7 +284,7 @@ const breadcrumbs = computed(() => {
 function validateFile(file) {
   let extn = file.name.split('.').pop().toLowerCase()
   if (!['png', 'jpg', 'jpeg'].includes(extn)) {
-    return 'Only PNG and JPG images are allowed'
+    return __('Only PNG and JPG images are allowed')
   }
 }
 
@@ -307,16 +295,16 @@ async function changeOrganizationImage(file) {
     fieldname: 'organization_logo',
     value: file?.file_url || '',
   })
-  organizations.reload()
+  organization.reload()
 }
 
 async function deleteOrganization() {
   $dialog({
-    title: 'Delete organization',
-    message: 'Are you sure you want to delete this organization?',
+    title: __('Delete organization'),
+    message: __('Are you sure you want to delete this organization?'),
     actions: [
       {
-        label: 'Delete',
+        label: __('Delete'),
         theme: 'red',
         variant: 'solid',
         async onClick(close) {
@@ -339,11 +327,6 @@ function website(url) {
 const tabIndex = ref(0)
 const tabs = [
   {
-    label: 'Leads',
-    icon: h(LeadsIcon, { class: 'h-4 w-4' }),
-    count: computed(() => leads.data?.length),
-  },
-  {
     label: 'Deals',
     icon: h(DealsIcon, { class: 'h-4 w-4' }),
     count: computed(() => deals.data?.length),
@@ -356,31 +339,6 @@ const tabs = [
 ]
 
 const { getUser } = usersStore()
-
-const leads = createListResource({
-  type: 'list',
-  doctype: 'CRM Lead',
-  cache: ['leads', props.organizationId],
-  fields: [
-    'name',
-    'first_name',
-    'lead_name',
-    'image',
-    'organization',
-    'status',
-    'email',
-    'mobile_no',
-    'lead_owner',
-    'modified',
-  ],
-  filters: {
-    organization: props.organizationId,
-    converted: 0,
-  },
-  orderBy: 'modified desc',
-  pageLength: 20,
-  auto: true,
-})
 
 const deals = createListResource({
   type: 'list',
@@ -427,55 +385,18 @@ const contacts = createListResource({
 
 const rows = computed(() => {
   let list = []
-  list = !tabIndex.value ? leads : tabIndex.value == 1 ? deals : contacts
+  list = !tabIndex.value ? deals : contacts
 
   if (!list.data) return []
 
   return list.data.map((row) => {
-    return !tabIndex.value
-      ? getLeadRowObject(row)
-      : tabIndex.value == 1
-      ? getDealRowObject(row)
-      : getContactRowObject(row)
+    return !tabIndex.value ? getDealRowObject(row) : getContactRowObject(row)
   })
 })
 
 const columns = computed(() => {
-  return tabIndex.value === 0
-    ? leadColumns
-    : tabIndex.value === 1
-    ? dealColumns
-    : contactColumns
+  return tabIndex.value === 0 ? dealColumns : contactColumns
 })
-
-function getLeadRowObject(lead) {
-  return {
-    name: lead.name,
-    lead_name: {
-      label: lead.lead_name,
-      image: lead.image,
-      image_label: lead.first_name,
-    },
-    organization: {
-      label: lead.organization,
-      logo: props.organization?.organization_logo,
-    },
-    status: {
-      label: lead.status,
-      color: getLeadStatus(lead.status)?.iconColorClass,
-    },
-    email: lead.email,
-    mobile_no: lead.mobile_no,
-    lead_owner: {
-      label: lead.lead_owner && getUser(lead.lead_owner).full_name,
-      ...(lead.lead_owner && getUser(lead.lead_owner)),
-    },
-    modified: {
-      label: dateFormat(lead.modified, dateTooltipFormat),
-      timeAgo: timeAgo(lead.modified),
-    },
-  }
-}
 
 function getDealRowObject(deal) {
   return {
@@ -497,7 +418,7 @@ function getDealRowObject(deal) {
     },
     modified: {
       label: dateFormat(deal.modified, dateTooltipFormat),
-      timeAgo: timeAgo(deal.modified),
+      timeAgo: __(timeAgo(deal.modified)),
     },
   }
 }
@@ -518,82 +439,44 @@ function getContactRowObject(contact) {
     },
     modified: {
       label: dateFormat(contact.modified, dateTooltipFormat),
-      timeAgo: timeAgo(contact.modified),
+      timeAgo: __(timeAgo(contact.modified)),
     },
   }
 }
 
-const leadColumns = [
-  {
-    label: 'Name',
-    key: 'lead_name',
-    width: '12rem',
-  },
-  {
-    label: 'Organization',
-    key: 'organization',
-    width: '10rem',
-  },
-  {
-    label: 'Status',
-    key: 'status',
-    width: '8rem',
-  },
-  {
-    label: 'Email',
-    key: 'email',
-    width: '12rem',
-  },
-  {
-    label: 'Mobile no',
-    key: 'mobile_no',
-    width: '11rem',
-  },
-  {
-    label: 'Lead owner',
-    key: 'lead_owner',
-    width: '10rem',
-  },
-  {
-    label: 'Last modified',
-    key: 'modified',
-    width: '8rem',
-  },
-]
-
 const dealColumns = [
   {
-    label: 'Organization',
+    label: __('Organization'),
     key: 'organization',
     width: '11rem',
   },
   {
-    label: 'Amount',
+    label: __('Amount'),
     key: 'annual_revenue',
     width: '9rem',
   },
   {
-    label: 'Status',
+    label: __('Status'),
     key: 'status',
     width: '10rem',
   },
   {
-    label: 'Email',
+    label: __('Email'),
     key: 'email',
     width: '12rem',
   },
   {
-    label: 'Mobile no',
+    label: __('Mobile no'),
     key: 'mobile_no',
     width: '11rem',
   },
   {
-    label: 'Deal owner',
+    label: __('Deal owner'),
     key: 'deal_owner',
     width: '10rem',
   },
   {
-    label: 'Last modified',
+    label: __('Last modified'),
     key: 'modified',
     width: '8rem',
   },
@@ -601,38 +484,29 @@ const dealColumns = [
 
 const contactColumns = [
   {
-    label: 'Name',
+    label: __('Name'),
     key: 'full_name',
     width: '17rem',
   },
   {
-    label: 'Email',
+    label: __('Email'),
     key: 'email',
     width: '12rem',
   },
   {
-    label: 'Phone',
+    label: __('Phone'),
     key: 'mobile_no',
     width: '12rem',
   },
   {
-    label: 'Organization',
+    label: __('Organization'),
     key: 'company_name',
     width: '12rem',
   },
   {
-    label: 'Last modified',
+    label: __('Last modified'),
     key: 'modified',
     width: '8rem',
   },
 ]
-
-function reload(val) {
-  leads.filters.organization = val
-  deals.filters.organization = val
-  contacts.filters.company_name = val
-  leads.reload()
-  deals.reload()
-  contacts.reload()
-}
 </script>

@@ -1,0 +1,144 @@
+<template>
+  <Dialog
+    v-model="show"
+    :options="{
+      size: '3xl',
+      title: __('Create Lead'),
+    }"
+  >
+    <template #body-content>
+      <Fields v-if="sections.data" :sections="sections.data" :data="lead" />
+      <ErrorMessage class="mt-4" v-if="error" :message="__(error)" />
+    </template>
+    <template #actions>
+      <div class="flex flex-row-reverse gap-2">
+        <Button
+          variant="solid"
+          :label="__('Create')"
+          :loading="isLeadCreating"
+          @click="createNewLead"
+        />
+      </div>
+    </template>
+  </Dialog>
+</template>
+
+<script setup>
+import Fields from '@/components/Fields.vue'
+import { usersStore } from '@/stores/users'
+import { statusesStore } from '@/stores/statuses'
+import { createResource } from 'frappe-ui'
+import { computed, onMounted, ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+
+const { getUser } = usersStore()
+const { getLeadStatus, statusOptions } = statusesStore()
+
+const show = defineModel()
+const router = useRouter()
+const error = ref(null)
+const isLeadCreating = ref(false)
+
+const sections = createResource({
+  url: 'crm.api.doc.get_quick_entry_fields',
+  cache: ['quickEntryFields', 'CRM Lead'],
+  params: { doctype: 'CRM Lead' },
+  auto: true,
+  transform: (data) => {
+    return data.forEach((section) => {
+      section.fields.forEach((field) => {
+        if (field.name == 'status') {
+          field.type = 'Select'
+          field.options = leadStatuses.value
+          field.prefix = getLeadStatus(lead.status).iconColorClass
+        } else if (field.name == 'lead_owner') {
+          field.type = 'User'
+        }
+      })
+    })
+  },
+})
+
+const lead = reactive({
+  salutation: '',
+  first_name: '',
+  last_name: '',
+  email: '',
+  mobile_no: '',
+  gender: '',
+  organization: '',
+  website: '',
+  no_of_employees: '',
+  territory: '',
+  annual_revenue: '',
+  industry: '',
+  status: '',
+  lead_owner: '',
+})
+
+const createLead = createResource({
+  url: 'frappe.client.insert',
+  makeParams(values) {
+    return {
+      doc: {
+        doctype: 'CRM Lead',
+        ...values,
+      },
+    }
+  },
+})
+
+const leadStatuses = computed(() => {
+  let statuses = statusOptions('lead')
+  if (!lead.status) {
+    lead.status = statuses[0].value
+  }
+  return statuses
+})
+
+function createNewLead() {
+  createLead.submit(lead, {
+    validate() {
+      error.value = null
+      if (!lead.first_name) {
+        error.value = __('First Name is mandatory')
+        return error.value
+      }
+      if (lead.website && !lead.website.startsWith('http')) {
+        lead.website = 'https://' + lead.website
+      }
+      if (lead.annual_revenue) {
+        lead.annual_revenue = lead.annual_revenue.replace(/,/g, '')
+        if (isNaN(lead.annual_revenue)) {
+          error.value = __('Annual Revenue should be a number')
+          return error.value
+        }
+      }
+      if (lead.mobile_no && isNaN(lead.mobile_no.replace(/[-+() ]/g, ''))) {
+        error.value = __('Mobile No should be a number')
+        return error.value
+      }
+      if (lead.email && !lead.email.includes('@')) {
+        error.value = __('Invalid Email')
+        return error.value
+      }
+      if (!lead.status) {
+        error.value = __('Status is required')
+        return error.value
+      }
+      isLeadCreating.value = true
+    },
+    onSuccess(data) {
+      isLeadCreating.value = false
+      show.value = false
+      router.push({ name: 'Lead', params: { leadId: data.name } })
+    },
+  })
+}
+
+onMounted(() => {
+  if (!lead.lead_owner) {
+    lead.lead_owner = getUser().email
+  }
+})
+</script>

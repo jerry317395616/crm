@@ -2,6 +2,7 @@ import TaskStatusIcon from '@/components/Icons/TaskStatusIcon.vue'
 import TaskPriorityIcon from '@/components/Icons/TaskPriorityIcon.vue'
 import { useDateFormat, useTimeAgo } from '@vueuse/core'
 import { usersStore } from '@/stores/users'
+import { gemoji } from 'gemoji'
 import { toast } from 'frappe-ui'
 import { h } from 'vue'
 
@@ -116,7 +117,7 @@ export function validateEmail(email) {
 
 export function setupAssignees(data) {
   let { getUser } = usersStore()
-  let assignees = JSON.parse(data._assign) || []
+  let assignees = data._assign || []
   data._assignedTo = assignees.map((user) => ({
     name: user,
     image: getUser(user).user_image,
@@ -124,9 +125,94 @@ export function setupAssignees(data) {
   }))
 }
 
+function getActionsFromScript(script, obj) {
+  let scriptFn = new Function(script + '\nreturn setupForm')()
+  let formScript = scriptFn(obj)
+  return formScript?.actions || []
+}
+
 export function setupCustomActions(data, obj) {
   if (!data._form_script) return []
-  let script = new Function(data._form_script + '\nreturn setupForm')()
-  let formScript = script(obj)
-  data._customActions = formScript?.actions || []
+
+  let actions = []
+  if (Array.isArray(data._form_script)) {
+    data._form_script.forEach((script) => {
+      actions = actions.concat(getActionsFromScript(script, obj))
+    })
+  } else {
+    actions = getActionsFromScript(data._form_script, obj)
+  }
+
+  data._customActions = actions
+}
+
+function getActionsFromListScript(script, obj) {
+  let scriptFn = new Function(script + '\nreturn setupList')()
+  let listScript = scriptFn(obj)
+  return {
+    actions: listScript?.actions || [],
+    bulk_actions: listScript?.bulk_actions || [],
+  }
+}
+
+export function setupListActions(data, obj = {}) {
+  if (!data.list_script) return []
+
+  let actions = []
+  let bulkActions = []
+
+  if (Array.isArray(data.list_script)) {
+    data.list_script.forEach((script) => {
+      let _actions = getActionsFromListScript(script, obj)
+      actions = actions.concat(_actions.actions)
+      bulkActions = bulkActions.concat(_actions.bulk_actions)
+    })
+  } else {
+    let _actions = getActionsFromListScript(data.list_script, obj)
+    actions = _actions.actions
+    bulkActions = _actions.bulk_actions
+  }
+
+  data.listActions = actions
+  data.bulkActions = bulkActions
+}
+
+export function errorMessage(title, message) {
+  createToast({
+    title: title || 'Error',
+    text: message,
+    icon: 'x',
+    iconClasses: 'text-red-600',
+  })
+}
+
+export function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(show_success_alert)
+  } else {
+    let input = document.createElement('textarea')
+    document.body.appendChild(input)
+    input.value = text
+    input.select()
+    document.execCommand('copy')
+    show_success_alert()
+    document.body.removeChild(input)
+  }
+  function show_success_alert() {
+    createToast({
+      title: 'Copied to clipboard',
+      text: text,
+      icon: 'check',
+      iconClasses: 'text-green-600',
+    })
+  }
+}
+
+export function isEmoji(str) {
+  const emojiList = gemoji.map((emoji) => emoji.emoji)
+  return emojiList.includes(str)
+}
+
+export function isTouchScreenDevice() {
+	return "ontouchstart" in document.documentElement;
 }

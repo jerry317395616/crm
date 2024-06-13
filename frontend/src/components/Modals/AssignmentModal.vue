@@ -2,11 +2,11 @@
   <Dialog
     v-model="show"
     :options="{
-      title: 'Assign To',
+      title: __('Assign To'),
       size: 'xl',
       actions: [
         {
-          label: 'Cancel',
+          label: __('Cancel'),
           variant: 'subtle',
           onClick: () => {
             assignees = oldAssignees
@@ -14,7 +14,7 @@
           },
         },
         {
-          label: 'Update',
+          label: __('Update'),
           variant: 'solid',
           onClick: () => updateAssignees(),
         },
@@ -27,13 +27,17 @@
         value=""
         doctype="User"
         @change="(option) => addValue(option) && ($refs.input.value = '')"
+        :placeholder="__('John Doe')"
+        :hideMe="true"
       >
         <template #item-prefix="{ option }">
           <UserAvatar class="mr-2" :user="option.value" size="sm" />
         </template>
         <template #item-label="{ option }">
           <Tooltip :text="option.value">
-            {{ getUser(option.value).full_name }}
+            <div class="cursor-pointer">
+              {{ getUser(option.value).full_name }}
+            </div>
           </Tooltip>
         </template>
       </Link>
@@ -62,7 +66,7 @@
           </Button>
         </Tooltip>
       </div>
-      <ErrorMessage class="mt-2" v-if="error" :message="error" />
+      <ErrorMessage class="mt-2" v-if="error" :message="__(error)" />
     </template>
   </Dialog>
 </template>
@@ -72,7 +76,7 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import Link from '@/components/Controls/Link.vue'
 import { usersStore } from '@/stores/users'
 import { Tooltip, call } from 'frappe-ui'
-import { defineModel, ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { watchOnce } from '@vueuse/core'
 
 const props = defineProps({
@@ -80,7 +84,17 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  docs: {
+    type: Array,
+    default: () => [],
+  },
+  doctype: {
+    type: String,
+    default: '',
+  },
 })
+
+const emit = defineEmits(['reload'])
 
 const show = defineModel()
 const assignees = defineModel('assignees')
@@ -98,7 +112,7 @@ const removeValue = (value) => {
 
 const owner = computed(() => {
   if (!props.doc) return ''
-  if (props.doc.doctype == 'CRM Lead') return props.doc.lead_owner
+  if (props.doctype == 'CRM Lead') return props.doc.lead_owner
   return props.doc.deal_owner
 })
 
@@ -134,7 +148,7 @@ function updateAssignees() {
   if (removedAssignees.length) {
     for (let a of removedAssignees) {
       call('frappe.desk.form.assign_to.remove', {
-        doctype: props.doc.doctype,
+        doctype: props.doctype,
         name: props.doc.name,
         assign_to: a,
       })
@@ -142,11 +156,23 @@ function updateAssignees() {
   }
 
   if (addedAssignees.length) {
-    call('frappe.desk.form.assign_to.add', {
-      doctype: props.doc.doctype,
-      name: props.doc.name,
-      assign_to: addedAssignees,
-    })
+    if (props.docs.size) {
+      call('frappe.desk.form.assign_to.add_multiple', {
+        doctype: props.doctype,
+        name: JSON.stringify(Array.from(props.docs)),
+        assign_to: addedAssignees,
+        bulk_assign: true,
+        re_assign: true,
+      }).then(() => {
+        emit('reload')
+      })
+    } else {
+      call('frappe.desk.form.assign_to.add', {
+        doctype: props.doctype,
+        name: props.doc.name,
+        assign_to: addedAssignees,
+      })
+    }
   }
   show.value = false
 }

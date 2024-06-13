@@ -1,71 +1,109 @@
 <template>
-  <div class="flex justify-between gap-3 border-t px-10 py-2.5">
+  <div class="flex justify-between gap-3 border-t px-4 py-2.5 sm:px-10">
     <div class="flex gap-1.5">
       <Button
         ref="sendEmailRef"
         variant="ghost"
-        :class="[showCommunicationBox ? '!bg-gray-300 hover:!bg-gray-200' : '']"
-        label="Reply"
-        @click="showCommunicationBox = !showCommunicationBox"
+        :class="[showEmailBox ? '!bg-gray-300 hover:!bg-gray-200' : '']"
+        :label="__('Reply')"
+        @click="toggleEmailBox()"
       >
         <template #prefix>
           <EmailIcon class="h-4" />
         </template>
       </Button>
-      <!-- <Button variant="ghost" label="Comment">
+      <Button
+        variant="ghost"
+        :label="__('Comment')"
+        :class="[showCommentBox ? '!bg-gray-300 hover:!bg-gray-200' : '']"
+        @click="toggleCommentBox()"
+      >
         <template #prefix>
           <CommentIcon class="h-4" />
         </template>
-      </Button> -->
+      </Button>
     </div>
-    <div v-if="showCommunicationBox" class="flex gap-1.5">
+    <div v-if="showEmailBox" class="flex gap-1.5">
       <Button
-        label="CC"
-        @click="newEmailEditor.cc = !newEmailEditor.cc"
+        :label="__('CC')"
+        @click="toggleCC()"
         :class="[newEmailEditor.cc ? 'bg-gray-300 hover:bg-gray-200' : '']"
       />
       <Button
-        label="BCC"
-        @click="newEmailEditor.bcc = !newEmailEditor.bcc"
+        :label="__('BCC')"
+        @click="toggleBCC()"
         :class="[newEmailEditor.bcc ? 'bg-gray-300 hover:bg-gray-200' : '']"
       />
     </div>
   </div>
   <div
-    v-show="showCommunicationBox"
-    @keydown.ctrl.enter.capture.stop="submitComment"
-    @keydown.meta.enter.capture.stop="submitComment"
+    v-show="showEmailBox"
+    @keydown.ctrl.enter.capture.stop="submitEmail"
+    @keydown.meta.enter.capture.stop="submitEmail"
   >
     <EmailEditor
       ref="newEmailEditor"
-      :value="newEmail"
-      @change="onNewEmailChange"
+      v-model:content="newEmail"
       :submitButtonProps="{
         variant: 'solid',
-        onClick: submitComment,
+        onClick: submitEmail,
         disabled: emailEmpty,
       }"
       :discardButtonProps="{
         onClick: () => {
-          showCommunicationBox = false
+          showEmailBox = false
+          newEmailEditor.subject = subject
+          newEmailEditor.toEmails = doc.data.email ? [doc.data.email] : []
+          newEmailEditor.ccEmails = []
+          newEmailEditor.bccEmails = []
+          newEmailEditor.cc = false
+          newEmailEditor.bcc = false
           newEmail = ''
         },
       }"
-      :editable="showCommunicationBox"
+      :editable="showEmailBox"
       v-model="doc.data"
       v-model:attachments="attachments"
       :doctype="doctype"
-      placeholder="Add a reply..."
+      :subject="subject"
+      :placeholder="
+        __('Hi John, \n\nCan you please provide more details on this...')
+      "
+    />
+  </div>
+  <div v-show="showCommentBox">
+    <CommentBox
+      ref="newCommentEditor"
+      v-model:content="newComment"
+      :submitButtonProps="{
+        variant: 'solid',
+        onClick: submitComment,
+        disabled: commentEmpty,
+      }"
+      :discardButtonProps="{
+        onClick: () => {
+          showCommentBox = false
+          newComment = ''
+        },
+      }"
+      :editable="showCommentBox"
+      v-model="doc.data"
+      v-model:attachments="attachments"
+      :doctype="doctype"
+      :placeholder="__('@John, can you please check this?')"
     />
   </div>
 </template>
 
 <script setup>
 import EmailEditor from '@/components/EmailEditor.vue'
+import CommentBox from '@/components/CommentBox.vue'
+import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
 import { usersStore } from '@/stores/users'
-import { call } from 'frappe-ui'
-import { ref, watch, computed, defineModel } from 'vue'
+import { useStorage } from '@vueuse/core'
+import { call, createResource } from 'frappe-ui'
+import { ref, watch, computed, nextTick } from 'vue'
 
 const props = defineProps({
   doctype: {
@@ -81,39 +119,80 @@ const emit = defineEmits(['scroll'])
 
 const { getUser } = usersStore()
 
-const showCommunicationBox = ref(false)
-const newEmail = ref('')
+const showEmailBox = ref(false)
+const showCommentBox = ref(false)
+const newEmail = useStorage('emailBoxContent', '')
+const newComment = useStorage('commentBoxContent', '')
 const newEmailEditor = ref(null)
+const newCommentEditor = ref(null)
 const sendEmailRef = ref(null)
 const attachments = ref([])
 
+const subject = computed(() => {
+  let prefix = ''
+  if (doc.value.data?.lead_name) {
+    prefix = doc.value.data.lead_name
+  } else if (doc.value.data?.organization) {
+    prefix = doc.value.data.organization
+  }
+  return `${prefix} (#${doc.value.data.name})`
+})
+
+const signature = createResource({
+  url: 'crm.api.get_user_signature',
+  cache: 'user-email-signature',
+  auto: true,
+})
+
+function setSignature(editor) {
+  signature.data = signature.data.replace(/\n/g, '<br>')
+  let emailContent = editor.getHTML()
+  emailContent = emailContent.startsWith('<p></p>')
+    ? emailContent.slice(7)
+    : emailContent
+  editor.commands.setContent(signature.data + emailContent)
+  editor.commands.focus('start')
+}
+
 watch(
-  () => showCommunicationBox.value,
+  () => showEmailBox.value,
   (value) => {
     if (value) {
-      newEmailEditor.value.editor.commands.focus()
+      let editor = newEmailEditor.value.editor
+      editor.commands.focus()
+      setSignature(editor)
     }
   }
 )
+
+watch(
+  () => showCommentBox.value,
+  (value) => {
+    if (value) {
+      newCommentEditor.value.editor.commands.focus()
+    }
+  }
+)
+
+const commentEmpty = computed(() => {
+  return !newComment.value || newComment.value === '<p></p>'
+})
 
 const emailEmpty = computed(() => {
   return !newEmail.value || newEmail.value === '<p></p>'
 })
 
-const onNewEmailChange = (value) => {
-  newEmail.value = value
-}
-
 async function sendMail() {
   let recipients = newEmailEditor.value.toEmails
-  let cc = newEmailEditor.value.ccEmails
-  let bcc = newEmailEditor.value.bccEmails
+  let subject = newEmailEditor.value.subject
+  let cc = newEmailEditor.value.ccEmails || []
+  let bcc = newEmailEditor.value.bccEmails || []
   await call('frappe.core.doctype.communication.email.make', {
     recipients: recipients.join(', '),
     attachments: attachments.value.map((x) => x.name),
     cc: cc.join(', '),
     bcc: bcc.join(', '),
-    subject: 'Email from Agent',
+    subject: subject,
     content: newEmail.value,
     doctype: props.doctype,
     name: doc.value.data.name,
@@ -123,14 +202,73 @@ async function sendMail() {
   })
 }
 
-async function submitComment() {
+async function sendComment() {
+  let comment = await call('frappe.desk.form.utils.add_comment', {
+    reference_doctype: props.doctype,
+    reference_name: doc.value.data.name,
+    content: newComment.value,
+    comment_email: getUser().name,
+    comment_by: getUser()?.full_name || undefined,
+  })
+  if (comment && attachments.value.length) {
+    await call('crm.api.comment.add_attachments', {
+      name: comment.name,
+      attachments: attachments.value.map((x) => x.name),
+    })
+  }
+}
+
+async function submitEmail() {
   if (emailEmpty.value) return
-  showCommunicationBox.value = false
+  showEmailBox.value = false
   await sendMail()
   newEmail.value = ''
   reload.value = true
   emit('scroll')
 }
 
-defineExpose({ show: showCommunicationBox, editor: newEmailEditor })
+async function submitComment() {
+  if (commentEmpty.value) return
+  showCommentBox.value = false
+  await sendComment()
+  newComment.value = ''
+  reload.value = true
+  emit('scroll')
+}
+
+function toggleCC() {
+  newEmailEditor.value.cc = !newEmailEditor.value.cc
+  newEmailEditor.value.cc &&
+    nextTick(() => {
+      newEmailEditor.value.ccInput.setFocus()
+    })
+}
+
+function toggleBCC() {
+  newEmailEditor.value.bcc = !newEmailEditor.value.bcc
+  newEmailEditor.value.bcc &&
+    nextTick(() => {
+      newEmailEditor.value.bccInput.setFocus()
+    })
+}
+
+function toggleEmailBox() {
+  if (showCommentBox.value) {
+    showCommentBox.value = false
+  }
+  showEmailBox.value = !showEmailBox.value
+}
+
+function toggleCommentBox() {
+  if (showEmailBox.value) {
+    showEmailBox.value = false
+  }
+  showCommentBox.value = !showCommentBox.value
+}
+
+defineExpose({
+  show: showEmailBox,
+  showComment: showCommentBox,
+  editor: newEmailEditor,
+})
 </script>

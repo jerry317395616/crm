@@ -32,10 +32,13 @@ def get_deal_activities(name):
 	lead = doc[2]
 
 	activities = []
+	calls = []
+	notes = []
+	tasks = []
 	creation_text = "created this deal"
 
 	if lead:
-		activities = get_lead_activities(lead)
+		activities, calls, notes, tasks = get_lead_activities(lead)
 		creation_text = "converted the lead to this deal"
 
 	activities.append({
@@ -95,9 +98,22 @@ def get_deal_activities(name):
 		}
 		activities.append(activity)
 
-	for communication in docinfo.communications:
+	for comment in docinfo.comments:
+		activity = {
+			"name": comment.name,
+			"activity_type": "comment",
+			"creation": comment.creation,
+			"owner": comment.owner,
+			"content": comment.content,
+			"attachments": get_attachments('Comment', comment.name),
+			"is_lead": False,
+		}
+		activities.append(activity)
+
+	for communication in docinfo.communications + docinfo.automated_messages:
 		activity = {
 			"activity_type": "communication",
+			"communication_type": communication.communication_type,
 			"creation": communication.creation,
 			"data": {
 				"subject": communication.subject,
@@ -107,17 +123,21 @@ def get_deal_activities(name):
 				"recipients": communication.recipients,
 				"cc": communication.cc,
 				"bcc": communication.bcc,
-				"attachments": get_attachments(communication.name),
+				"attachments": get_attachments('Communication', communication.name),
 				"read_by_recipient": communication.read_by_recipient,
 			},
 			"is_lead": False,
 		}
 		activities.append(activity)
 
+	calls = calls + get_linked_calls(name)
+	notes = notes + get_linked_notes(name)
+	tasks = tasks + get_linked_tasks(name)
+
 	activities.sort(key=lambda x: x["creation"], reverse=True)
 	activities = handle_multiple_versions(activities)
 
-	return activities
+	return activities, calls, notes, tasks
 
 def get_lead_activities(name):
 	get_docinfo('', "CRM Lead", name)
@@ -191,9 +211,22 @@ def get_lead_activities(name):
 		}
 		activities.append(activity)
 
-	for communication in docinfo.communications:
+	for comment in docinfo.comments:
+		activity = {
+			"name": comment.name,
+			"activity_type": "comment",
+			"creation": comment.creation,
+			"owner": comment.owner,
+			"content": comment.content,
+			"attachments": get_attachments('Comment', comment.name),
+			"is_lead": True,
+		}
+		activities.append(activity)
+
+	for communication in docinfo.communications + docinfo.automated_messages:
 		activity = {
 			"activity_type": "communication",
+			"communication_type": communication.communication_type,
 			"creation": communication.creation,
 			"data": {
 				"subject": communication.subject,
@@ -203,23 +236,27 @@ def get_lead_activities(name):
 				"recipients": communication.recipients,
 				"cc": communication.cc,
 				"bcc": communication.bcc,
-				"attachments": get_attachments(communication.name),
+				"attachments": get_attachments('Communication', communication.name),
 				"read_by_recipient": communication.read_by_recipient,
 			},
 			"is_lead": True,
 		}
 		activities.append(activity)
 
+	calls = get_linked_calls(name)
+	notes = get_linked_notes(name)
+	tasks = get_linked_tasks(name)
+
 	activities.sort(key=lambda x: x["creation"], reverse=True)
 	activities = handle_multiple_versions(activities)
 
-	return activities
+	return activities, calls, notes, tasks
 
 @redis_cache()
-def get_attachments(name):
+def get_attachments(doctype, name):
 	return frappe.db.get_all(
 		"File",
-		filters={"attached_to_doctype": "Communication", "attached_to_name": name},
+		filters={"attached_to_doctype": doctype, "attached_to_name": name},
 		fields=["name", "file_name", "file_url", "file_size", "is_private"],
 	)
 
@@ -255,3 +292,51 @@ def parse_grouped_versions(versions):
 	other_versions = versions[1:]
 	version["other_versions"] = other_versions
 	return version
+
+def get_linked_calls(name):
+	calls = frappe.db.get_all(
+		"CRM Call Log",
+		filters={"reference_docname": name},
+		fields=[
+			"name",
+			"caller",
+			"receiver",
+			"from",
+			"to",
+			"duration",
+			"start_time",
+			"end_time",
+			"status",
+			"type",
+			"recording_url",
+			"creation",
+			"note",
+		],
+	)
+	return calls or []
+
+def get_linked_notes(name):
+	notes = frappe.db.get_all(
+		"FCRM Note",
+		filters={"reference_docname": name},
+		fields=['name', 'title', 'content', 'owner', 'modified'],
+	)
+	return notes or []
+
+def get_linked_tasks(name):
+	tasks = frappe.db.get_all(
+		"CRM Task",
+		filters={"reference_docname": name},
+		fields=[
+			"name",
+			"title",
+			"description",
+			"assigned_to",
+			"assigned_to",
+			"due_date",
+			"priority",
+			"status",
+			"modified",
+		],
+	)
+	return tasks or []

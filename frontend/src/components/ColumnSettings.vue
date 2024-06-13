@@ -1,8 +1,13 @@
 <template>
   <NestedPopover>
     <template #target>
-      <Button>
-        <SettingsIcon class="h-4" />
+      <Button :label="__('Columns')">
+        <template v-if="hideLabel">
+          <ColumnsIcon class="h-4" />
+        </template>
+        <template v-if="!hideLabel" #prefix>
+          <ColumnsIcon class="h-4" />
+        </template>
       </Button>
     </template>
     <template #body="{ close }">
@@ -13,6 +18,7 @@
           <Draggable
             :list="columns"
             @end="apply"
+            :delay="isTouchScreenDevice() ? 200 : 0"
             item-key="key"
             class="list-group"
           >
@@ -22,7 +28,7 @@
               >
                 <div class="flex items-center gap-2">
                   <DragIcon class="h-3.5" />
-                  <div>{{ element.label }}</div>
+                  <div>{{ __(element.label) }}</div>
                 </div>
                 <div class="flex cursor-pointer items-center gap-1">
                   <Button
@@ -54,7 +60,7 @@
                   class="w-full !justify-start !text-gray-600"
                   variant="ghost"
                   @click="togglePopover()"
-                  label="Add Column"
+                  :label="__('Add Column')"
                 >
                   <template #prefix>
                     <FeatherIcon name="plus" class="h-4" />
@@ -67,7 +73,7 @@
               class="w-full !justify-start !text-gray-600"
               variant="ghost"
               @click="reset(close)"
-              label="Reset Changes"
+              :label="__('Reset Changes')"
             >
               <template #prefix>
                 <ReloadIcon class="h-4" />
@@ -78,7 +84,7 @@
               class="w-full !justify-start !text-gray-600"
               variant="ghost"
               @click="resetToDefault(close)"
-              label="Reset to Default"
+              :label="__('Reset to Default')"
             >
               <template #prefix>
                 <ReloadIcon class="h-4" />
@@ -94,32 +100,36 @@
               <FormControl
                 type="text"
                 size="md"
-                label="Label"
+                :label="__('Label')"
                 v-model="column.label"
-                class="w-full"
-                placeholder="Column Label"
+                class="sm:w-full w-52"
+                :placeholder="__('First Name')"
               />
               <FormControl
                 type="text"
                 size="md"
-                label="Width"
-                class="w-full"
+                :label="__('Width')"
+                class="sm:w-full w-52"
                 v-model="column.width"
-                placeholder="Column Width"
-                description="Width can be in number, pixel or rem (eg. 3, 30px, 10rem)"
+                placeholder="10rem"
+                :description="
+                  __(
+                    'Width can be in number, pixel or rem (eg. 3, 30px, 10rem)'
+                  )
+                "
                 :debounce="500"
               />
             </div>
             <div class="flex w-full gap-2 border-t pt-2">
               <Button
                 variant="subtle"
-                label="Cancel"
+                :label="__('Cancel')"
                 class="w-full flex-1"
                 @click="cancelUpdate"
               />
               <Button
                 variant="solid"
-                label="Update"
+                :label="__('Update')"
                 class="w-full flex-1"
                 @click="updateColumn(column)"
               />
@@ -132,20 +142,25 @@
 </template>
 
 <script setup>
-import SettingsIcon from '@/components/Icons/SettingsIcon.vue'
+import ColumnsIcon from '@/components/Icons/ColumnsIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import DragIcon from '@/components/Icons/DragIcon.vue'
 import ReloadIcon from '@/components/Icons/ReloadIcon.vue'
 import NestedPopover from '@/components/NestedPopover.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
+import { isTouchScreenDevice } from '@/utils'
 import Draggable from 'vuedraggable'
-import { computed, defineModel, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { watchOnce } from '@vueuse/core'
 
 const props = defineProps({
   doctype: {
     type: String,
     required: true,
+  },
+  hideLabel: {
+    type: Boolean,
+    default: false,
   },
 })
 

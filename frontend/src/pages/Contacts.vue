@@ -4,26 +4,46 @@
       <Breadcrumbs :items="breadcrumbs" />
     </template>
     <template #right-header>
-      <Button variant="solid" label="Create" @click="showContactModal = true">
+      <CustomActions
+        v-if="contactsListView?.customListActions"
+        :actions="contactsListView.customListActions"
+      />
+      <Button
+        variant="solid"
+        :label="__('Create')"
+        @click="showContactModal = true"
+      >
         <template #prefix><FeatherIcon name="plus" class="h-4" /></template>
       </Button>
     </template>
   </LayoutHeader>
   <ViewControls
+    ref="viewControls"
     v-model="contacts"
     v-model:loadMore="loadMore"
+    v-model:resizeColumn="triggerResize"
+    v-model:updatedPageCount="updatedPageCount"
     doctype="Contact"
   />
   <ContactsListView
+    ref="contactsListView"
     v-if="contacts.data && rows.length"
     v-model="contacts.data.page_length_count"
+    v-model:list="contacts"
     :rows="rows"
     :columns="contacts.data.columns"
     :options="{
+      showTooltip: false,
+      resizeColumn: true,
       rowCount: contacts.data.row_count,
       totalCount: contacts.data.total_count,
     }"
     @loadMore="() => loadMore++"
+    @columnWidthUpdated="() => triggerResize++"
+    @updatePageCount="(count) => (updatedPageCount = count)"
+    @applyFilter="(data) => viewControls.applyFilter(data)"
+    @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
+    @likeDoc="(data) => viewControls.likeDoc(data)"
   />
   <div
     v-else-if="contacts.data"
@@ -33,8 +53,8 @@
       class="flex flex-col items-center gap-3 text-xl font-medium text-gray-500"
     >
       <ContactsIcon class="h-10 w-10" />
-      <span>No Contacts Found</span>
-      <Button label="Create" @click="showContactModal = true">
+      <span>{{ __('No {0} Found', [__('Contacts')]) }}</span>
+      <Button :label="__('Create')" @click="showContactModal = true">
         <template #prefix><FeatherIcon name="plus" class="h-4" /></template>
       </Button>
     </div>
@@ -43,6 +63,7 @@
 </template>
 
 <script setup>
+import CustomActions from '@/components/CustomActions.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
@@ -66,10 +87,10 @@ const currentContact = computed(() => {
 })
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: 'Contacts', route: { name: 'Contacts' } }]
+  let items = [{ label: __('Contacts'), route: { name: 'Contacts' } }]
   if (!currentContact.value) return items
   items.push({
-    label: currentContact.value.full_name,
+    label: __(currentContact.value.full_name),
     route: {
       name: 'Contact',
       params: { contactId: currentContact.value.name },
@@ -78,9 +99,14 @@ const breadcrumbs = computed(() => {
   return items
 })
 
+const contactsListView = ref(null)
+
 // contacts data is loaded in the ViewControls component
 const contacts = ref({})
 const loadMore = ref(1)
+const triggerResize = ref(1)
+const updatedPageCount = ref(20)
+const viewControls = ref(null)
 
 const rows = computed(() => {
   if (!contacts.value?.data?.data) return []
@@ -103,7 +129,7 @@ const rows = computed(() => {
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = {
           label: dateFormat(contact[row], dateTooltipFormat),
-          timeAgo: timeAgo(contact[row]),
+          timeAgo: __(timeAgo(contact[row])),
         }
       }
     })

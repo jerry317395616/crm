@@ -37,53 +37,65 @@
   <div v-if="deal.data" class="flex h-full overflow-hidden">
     <Tabs v-model="tabIndex" v-slot="{ tab }" :tabs="tabs">
       <Activities
+        ref="activities"
         doctype="CRM Deal"
-        :title="tab.label"
+        :title="tab.name"
         v-model:reload="reload"
+        v-model:tabIndex="tabIndex"
         v-model="deal"
       />
     </Tabs>
-    <div class="flex w-[352px] flex-col justify-between border-l">
+    <Resizer side="right" class="flex flex-col justify-between border-l">
       <div
-        class="flex h-[41px] items-center border-b px-5 py-2.5 text-lg font-semibold"
+        class="flex h-10.5 cursor-copy items-center border-b px-5 py-2.5 text-lg font-medium"
+        @click="copyToClipboard(deal.data.name)"
       >
-        About this Deal
+        {{ __(deal.data.name) }}
       </div>
       <div class="flex items-center justify-start gap-5 border-b p-5">
-        <Tooltip
-          text="Organization logo"
-          class="group relative h-[88px] w-[88px]"
-        >
-          <Avatar
-            size="3xl"
-            class="h-[88px] w-[88px]"
-            :label="organization?.name"
-            :image="organization?.organization_logo"
-          />
+        <Tooltip :text="__('Organization logo')">
+          <div class="group relative size-12">
+            <Avatar
+              size="3xl"
+              class="size-12"
+              :label="organization?.name || __('Untitled')"
+              :image="organization?.organization_logo"
+            />
+          </div>
         </Tooltip>
         <div class="flex flex-col gap-2.5 truncate">
-          <Tooltip :text="organization?.name">
+          <Tooltip :text="organization?.name || __('Set an organization')">
             <div class="truncate text-2xl font-medium">
-              {{ organization?.name }}
+              {{ organization?.name || __('Untitled') }}
             </div>
           </Tooltip>
           <div class="flex gap-1.5">
-            <Tooltip text="Make a call...">
-              <Button
-                class="h-7 w-7"
-                @click="() => makeCall(deal.data.mobile_no)"
-              >
+            <Tooltip v-if="callEnabled" :text="__('Make a call')">
+              <Button class="h-7 w-7" @click="triggerCall">
                 <PhoneIcon class="h-4 w-4" />
               </Button>
             </Tooltip>
-            <Button class="h-7 w-7">
-              <EmailIcon class="h-4 w-4" />
-            </Button>
-            <Tooltip text="Go to website...">
+            <Tooltip :text="__('Send an email')">
+              <Button class="h-7 w-7">
+                <EmailIcon
+                  class="h-4 w-4"
+                  @click="
+                    deal.data.email
+                      ? openEmailBox()
+                      : errorMessage(__('No email set'))
+                  "
+                />
+              </Button>
+            </Tooltip>
+            <Tooltip :text="__('Go to website')">
               <Button class="h-7 w-7">
                 <LinkIcon
                   class="h-4 w-4"
-                  @click="openWebsite(deal.data.website)"
+                  @click="
+                    deal.data.website
+                      ? openWebsite(deal.data.website)
+                      : errorMessage(__('No website set'))
+                  "
                 />
               </Button>
             </Tooltip>
@@ -127,13 +139,10 @@
                     <template #target="{ togglePopover }">
                       <Button
                         class="h-7 px-3"
-                        label="Add Contact"
+                        variant="ghost"
+                        icon="plus"
                         @click="togglePopover()"
-                      >
-                        <template #prefix>
-                          <FeatherIcon name="plus" class="h-4" />
-                        </template>
-                      </Button>
+                      />
                     </template>
                   </Link>
                 </div>
@@ -146,7 +155,16 @@
               />
               <div v-else>
                 <div
-                  v-if="section.contacts"
+                  v-if="
+                    deal_contacts?.loading && deal_contacts?.data?.length == 0
+                  "
+                  class="flex min-h-20 flex-1 items-center justify-center gap-3 text-base text-gray-500"
+                >
+                  <LoadingIndicator class="h-4 w-4" />
+                  <span>{{ __('Loading...') }}</span>
+                </div>
+                <div
+                  v-else-if="section.contacts.length"
                   v-for="(contact, i) in section.contacts"
                   :key="contact.name"
                 >
@@ -164,29 +182,28 @@
                             @click="toggle()"
                           >
                             <Avatar
-                              :label="getContactByName(contact.name).full_name"
-                              :image="getContactByName(contact.name).image"
+                              :label="contact.full_name"
+                              :image="contact.image"
                               size="md"
                             />
                             <div class="truncate">
-                              {{ getContactByName(contact.name).full_name }}
+                              {{ contact.full_name }}
                             </div>
                             <Badge
                               v-if="contact.is_primary"
                               class="ml-2"
                               variant="outline"
-                              label="Primary"
+                              :label="__('Primary')"
                               theme="green"
                             />
                           </div>
                           <div class="flex items-center">
-                            <Dropdown :options="contactOptions(contact)">
-                              <Button variant="ghost">
-                                <FeatherIcon
-                                  name="more-horizontal"
-                                  class="h-4 text-gray-600"
-                                />
-                              </Button>
+                            <Dropdown :options="contactOptions(contact.name)">
+                              <Button
+                                icon="more-horizontal"
+                                class="text-gray-600"
+                                variant="ghost"
+                              />
                             </Dropdown>
                             <Button
                               variant="ghost"
@@ -214,11 +231,11 @@
                       >
                         <div class="flex items-center gap-3 pb-1.5 pl-1 pt-4">
                           <EmailIcon class="h-4 w-4" />
-                          {{ getContactByName(contact.name).email_id }}
+                          {{ contact.email }}
                         </div>
                         <div class="flex items-center gap-3 p-1 py-1.5">
                           <PhoneIcon class="h-4 w-4" />
-                          {{ getContactByName(contact.name).mobile_no }}
+                          {{ contact.mobile_no }}
                         </div>
                       </div>
                     </Section>
@@ -232,18 +249,18 @@
                   v-else
                   class="flex h-20 items-center justify-center text-base text-gray-600"
                 >
-                  No contacts added
+                  {{ __('No contacts added') }}
                 </div>
               </div>
             </Section>
           </div>
         </div>
       </div>
-    </div>
+    </Resizer>
   </div>
   <OrganizationModal
     v-model="showOrganizationModal"
-    :organization="_organization"
+    v-model:organization="_organization"
     :options="{
       redirect: false,
       afterInsert: (doc) =>
@@ -263,16 +280,21 @@
   <AssignmentModal
     v-if="deal.data"
     :doc="deal.data"
+    doctype="CRM Deal"
     v-model="showAssignmentModal"
     v-model:assignees="deal.data._assignedTo"
   />
 </template>
 <script setup>
+import Resizer from '@/components/Resizer.vue'
+import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
+import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
@@ -293,11 +315,13 @@ import {
   createToast,
   setupAssignees,
   setupCustomActions,
+  errorMessage,
+  copyToClipboard,
 } from '@/utils'
 import { globalStore } from '@/stores/global'
-import { contactsStore } from '@/stores/contacts'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
+import { whatsappEnabled, callEnabled } from '@/composables/settings'
 import {
   createResource,
   Dropdown,
@@ -307,11 +331,10 @@ import {
   Breadcrumbs,
   call,
 } from 'frappe-ui'
-import { ref, computed, h } from 'vue'
+import { ref, computed, h, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const { $dialog, makeCall } = globalStore()
-const { getContactByName, contacts } = contactsStore()
 const { organizations, getOrganization } = organizationsStore()
 const { statusOptions, getDealStatus } = statusesStore()
 const router = useRouter()
@@ -327,7 +350,6 @@ const deal = createResource({
   url: 'crm.fcrm.doctype.crm_deal.api.get_deal',
   params: { name: props.dealId },
   cache: ['deal', props.dealId],
-  auto: true,
   onSuccess: (data) => {
     setupAssignees(data)
     setupCustomActions(data, {
@@ -335,10 +357,16 @@ const deal = createResource({
       $dialog,
       router,
       updateField,
+      createToast,
       deleteDoc: deleteDeal,
       call,
     })
   },
+})
+
+onMounted(() => {
+  if (deal.data) return
+  deal.fetch()
 })
 
 const reload = ref(false)
@@ -366,10 +394,9 @@ function updateDeal(fieldname, value, callback) {
     auto: true,
     onSuccess: () => {
       deal.reload()
-      contacts.reload()
       reload.value = true
       createToast({
-        title: 'Deal updated',
+        title: __('Deal updated'),
         icon: 'check',
         iconClasses: 'text-green-600',
       })
@@ -377,8 +404,8 @@ function updateDeal(fieldname, value, callback) {
     },
     onError: (err) => {
       createToast({
-        title: 'Error updating deal',
-        text: err.messages?.[0],
+        title: __('Error updating deal'),
+        text: __(err.messages?.[0]),
         icon: 'x',
         iconClasses: 'text-red-600',
       })
@@ -390,8 +417,8 @@ function validateRequired(fieldname, value) {
   let meta = deal.data.all_fields || {}
   if (meta[fieldname]?.reqd && !value) {
     createToast({
-      title: 'Error Updating Deal',
-      text: `${meta[fieldname].label} is a required field`,
+      title: __('Error Updating Deal'),
+      text: __('{0} is a required field', [meta[fieldname].label]),
       icon: 'x',
       iconClasses: 'text-red-600',
     })
@@ -401,82 +428,98 @@ function validateRequired(fieldname, value) {
 }
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: 'Deals', route: { name: 'Deals' } }]
+  let items = [{ label: __('Deals'), route: { name: 'Deals' } }]
   items.push({
-    label: organization.value?.name,
+    label: organization.value?.name || __('Untitled'),
     route: { name: 'Deal', params: { dealId: deal.data.name } },
   })
   return items
 })
 
 const tabIndex = ref(0)
-const tabs = [
-  {
-    label: 'Activity',
-    icon: ActivityIcon,
-  },
-  {
-    label: 'Emails',
-    icon: EmailIcon,
-  },
-  {
-    label: 'Calls',
-    icon: PhoneIcon,
-  },
-  {
-    label: 'Tasks',
-    icon: TaskIcon,
-  },
-  {
-    label: 'Notes',
-    icon: NoteIcon,
-  },
-]
+const tabs = computed(() => {
+  let tabOptions = [
+    {
+      name: 'Activity',
+      label: __('Activity'),
+      icon: ActivityIcon,
+    },
+    {
+      name: 'Emails',
+      label: __('Emails'),
+      icon: EmailIcon,
+    },
+    {
+      name: 'Comments',
+      label: __('Comments'),
+      icon: CommentIcon,
+    },
+    {
+      name: 'Calls',
+      label: __('Calls'),
+      icon: PhoneIcon,
+      condition: () => callEnabled.value,
+    },
+    {
+      name: 'Tasks',
+      label: __('Tasks'),
+      icon: TaskIcon,
+    },
+    {
+      name: 'Notes',
+      label: __('Notes'),
+      icon: NoteIcon,
+    },
+    {
+      name: 'WhatsApp',
+      label: __('WhatsApp'),
+      icon: WhatsAppIcon,
+      condition: () => whatsappEnabled.value,
+    },
+  ]
+  return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+})
 
 const detailSections = computed(() => {
   let data = deal.data
   if (!data) return []
-  return getParsedFields(data.doctype_fields, data.contacts)
+  return getParsedFields(data.doctype_fields, deal_contacts.data)
 })
 
 function getParsedFields(sections, contacts) {
   sections.forEach((section) => {
-    section.fields.forEach((field) => {
-      if (
-        !deal.data.organization &&
-        ['website', 'territory', 'annual_revenue'].includes(field.name)
-      ) {
-        field.hidden = true
-      }
-      if (field.name == 'organization') {
-        field.create = (value, close) => {
-          _organization.value.organization_name = value
-          showOrganizationModal.value = true
-          close()
+    if (section.name == 'contacts_tab') {
+      delete section.fields
+      section.contacts =
+        contacts?.map((contact) => {
+          return {
+            name: contact.name,
+            full_name: contact.full_name,
+            email: contact.email,
+            mobile_no: contact.mobile_no,
+            image: contact.image,
+            is_primary: contact.is_primary,
+            opened: false,
+          }
+        }) || []
+    } else {
+      section.fields.forEach((field) => {
+        if (field.name == 'organization') {
+          field.create = (value, close) => {
+            _organization.value.organization_name = value
+            showOrganizationModal.value = true
+            close()
+          }
+          field.link = (org) =>
+            router.push({
+              name: 'Organization',
+              params: { organizationId: org },
+            })
         }
-        field.link = (org) =>
-          router.push({
-            name: 'Organization',
-            params: { organizationId: org },
-          })
-      }
-    })
+      })
+    }
   })
-
-  let contactSection = {
-    label: 'Contacts',
-    opened: true,
-    contacts:
-      contacts?.map((contact) => {
-        return {
-          name: contact.contact,
-          is_primary: contact.is_primary,
-          opened: false,
-        }
-      }) || [],
-  }
-
-  return [...sections, contactSection]
+  return sections
 }
 
 const showContactModal = ref(false)
@@ -485,17 +528,17 @@ const _contact = ref({})
 function contactOptions(contact) {
   let options = [
     {
-      label: 'Delete',
+      label: __('Delete'),
       icon: 'trash-2',
-      onClick: () => removeContact(contact.name),
+      onClick: () => removeContact(contact),
     },
   ]
 
   if (!contact.is_primary) {
     options.push({
-      label: 'Set as Primary Contact',
+      label: __('Set as Primary Contact'),
       icon: h(SuccessIcon, { class: 'h-4 w-4' }),
-      onClick: () => setPrimaryContact(contact.name),
+      onClick: () => setPrimaryContact(contact),
     })
   }
 
@@ -508,9 +551,9 @@ async function addContact(contact) {
     contact,
   })
   if (d) {
-    deal.reload()
+    deal_contacts.reload()
     createToast({
-      title: 'Contact added',
+      title: __('Contact added'),
       icon: 'check',
       iconClasses: 'text-green-600',
     })
@@ -523,9 +566,9 @@ async function removeContact(contact) {
     contact,
   })
   if (d) {
-    deal.reload()
+    deal_contacts.reload()
     createToast({
-      title: 'Contact removed',
+      title: __('Contact removed'),
       icon: 'check',
       iconClasses: 'text-green-600',
     })
@@ -538,14 +581,37 @@ async function setPrimaryContact(contact) {
     contact,
   })
   if (d) {
-    await contacts.reload()
-    deal.reload()
+    deal_contacts.reload()
     createToast({
-      title: 'Primary contact set',
+      title: __('Primary contact set'),
       icon: 'check',
       iconClasses: 'text-green-600',
     })
   }
+}
+
+const deal_contacts = createResource({
+  url: 'crm.fcrm.doctype.crm_deal.api.get_deal_contacts',
+  params: { name: props.dealId },
+  cache: ['deal_contacts', props.dealId],
+  auto: true,
+})
+
+function triggerCall() {
+  let primaryContact = deal_contacts.data?.find((c) => c.is_primary)
+  let mobile_no = primaryContact.mobile_no || null
+
+  if (!primaryContact) {
+    errorMessage(__('No primary contact set'))
+    return
+  }
+
+  if (!mobile_no) {
+    errorMessage(__('No mobile number set'))
+    return
+  }
+
+  makeCall(mobile_no)
 }
 
 function updateField(name, value, callback) {
@@ -561,5 +627,11 @@ async function deleteDeal(name) {
     name,
   })
   router.push({ name: 'Deals' })
+}
+
+const activities = ref(null)
+
+function openEmailBox() {
+  activities.value.emailBox.show = true
 }
 </script>

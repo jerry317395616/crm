@@ -47,16 +47,13 @@ class CRMServiceLevelAgreement(Document):
 			)
 
 	def apply(self, doc: Document):
-		self.handle_new(doc)
+		self.handle_creation(doc)
 		self.handle_communication_status(doc)
 		self.handle_targets(doc)
 		self.handle_sla_status(doc)
 
-	def handle_new(self, doc: Document):
-		if not doc.is_new():
-			return
-		creation = doc.sla_creation or now_datetime()
-		doc.sla_creation = creation
+	def handle_creation(self, doc: Document):
+		doc.sla_creation = doc.sla_creation or now_datetime()
 
 	def handle_communication_status(self, doc: Document):
 		if doc.is_new() or not doc.has_value_changed("communication_status"):
@@ -117,7 +114,7 @@ class CRMServiceLevelAgreement(Document):
 	):
 		res = get_datetime(start_at)
 		time_needed = duration_seconds
-		holidays = []
+		holidays = self.get_holidays()
 		weekdays = get_weekdays()
 		workdays = self.get_workdays()
 		while time_needed:
@@ -217,3 +214,12 @@ class CRMServiceLevelAgreement(Document):
 		start_time, end_time = working_hours.get(day_of_week, (0, 0))
 		date_time = timedelta(hours=date_time.hour, minutes=date_time.minute, seconds=date_time.second)
 		return start_time <= date_time < end_time
+
+	def get_holidays(self):
+		res = []
+		if not self.holiday_list:
+			return res
+		holiday_list = frappe.get_doc("CRM Holiday List", self.holiday_list)
+		for row in holiday_list.holidays:
+			res.append(row.date)
+		return res

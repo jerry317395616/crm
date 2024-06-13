@@ -1,11 +1,101 @@
 <template>
-  <div class="flex items-center justify-between px-5 pb-4 pt-3">
+  <div
+    v-if="isMobileView"
+    class="flex flex-col justify-between gap-2 sm:px-5 px-3 py-4"
+  >
+    <div class="flex items-center justify-between gap-2 overflow-x-auto">
+      <div class="flex gap-2">
+        <Dropdown :options="viewsDropdownOptions">
+          <template #default="{ open }">
+            <Button :label="__(currentView.label)">
+              <template #prefix>
+                <div v-if="isEmoji(currentView.icon)">
+                  {{ currentView.icon }}
+                </div>
+                <FeatherIcon
+                  v-else-if="typeof currentView.icon == 'string'"
+                  :name="currentView.icon"
+                  class="h-4"
+                />
+                <component v-else :is="currentView.icon" class="h-4" />
+              </template>
+              <template #suffix>
+                <FeatherIcon
+                  :name="open ? 'chevron-up' : 'chevron-down'"
+                  class="h-4 text-gray-600"
+                />
+              </template>
+            </Button>
+          </template>
+        </Dropdown>
+        <Dropdown :options="viewActions">
+          <template #default>
+            <Button icon="more-horizontal" />
+          </template>
+        </Dropdown>
+      </div>
+      <Button :label="__('Refresh')" @click="reload()" :loading="isLoading">
+        <template #icon>
+          <RefreshIcon class="h-4 w-4" />
+        </template>
+      </Button>
+    </div>
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2 overflow-x-auto">
+        <div class="flex gap-2">
+          <Filter
+            v-model="list"
+            :doctype="doctype"
+            :default_filters="filters"
+            @update="updateFilter"
+          />
+          <GroupBy
+            v-if="route.params.viewType === 'group_by'"
+            v-model="list"
+            :doctype="doctype"
+            :hideLabel="isMobileView"
+            @update="updateGroupBy"
+          />
+        </div>
+
+        <div class="flex gap-2">
+          <SortBy
+            v-model="list"
+            :doctype="doctype"
+            @update="updateSort"
+            :hideLabel="isMobileView"
+          />
+          <ColumnSettings
+            v-if="!options.hideColumnsButton"
+            v-model="list"
+            :doctype="doctype"
+            :hideLabel="isMobileView"
+            @update="(isDefault) => updateColumns(isDefault)"
+          />
+        </div>
+      </div>
+      <div
+        v-if="viewUpdated && route.query.view && (!view.public || isManager())"
+        class="flex flex-row-reverse items-center gap-2 border-r pr-2"
+      >
+        <Button :label="__('Cancel')" @click="cancelChanges" />
+        <Button :label="__('Save Changes')" @click="saveView" />
+      </div>
+    </div>
+  </div>
+  <div v-else class="flex items-center justify-between gap-2 px-5 py-4">
     <div class="flex items-center gap-2">
       <Dropdown :options="viewsDropdownOptions">
         <template #default="{ open }">
-          <Button :label="currentView.label">
+          <Button :label="__(currentView.label)">
             <template #prefix>
-              <FeatherIcon :name="currentView.icon" class="h-4" />
+              <div v-if="isEmoji(currentView.icon)">{{ currentView.icon }}</div>
+              <FeatherIcon
+                v-else-if="typeof currentView.icon == 'string'"
+                :name="currentView.icon"
+                class="h-4"
+              />
+              <component v-else :is="currentView.icon" class="h-4" />
             </template>
             <template #suffix>
               <FeatherIcon
@@ -16,16 +106,49 @@
           </Button>
         </template>
       </Dropdown>
+      <Dropdown :options="viewActions">
+        <template #default>
+          <Button icon="more-horizontal" />
+        </template>
+      </Dropdown>
     </div>
-    <div class="flex items-center gap-2">
-      <div v-if="viewUpdated" class="flex items-center gap-2 border-r pr-2">
-        <Button label="Cancel" @click="cancelChanges" />
-        <Button
-          :label="view?.name ? 'Save Changes' : 'Create View'"
-          @click="saveView"
+    <div class="-mr-2 h-[70%] border-l" />
+    <FadedScrollableDiv
+      class="flex flex-1 items-center overflow-x-auto px-1"
+      orientation="horizontal"
+    >
+      <div
+        v-for="filter in quickFilterList"
+        :key="filter.name"
+        class="m-1 min-w-36"
+      >
+        <QuickFilterField
+          :filter="filter"
+          @applyQuickFilter="(f, v) => applyQuickFilter(f, v)"
         />
       </div>
+    </FadedScrollableDiv>
+    <div class="-ml-2 h-[70%] border-l" />
+    <div class="flex items-center gap-2">
+      <div
+        v-if="viewUpdated && route.query.view && (!view.public || isManager())"
+        class="flex items-center gap-2 border-r pr-2"
+      >
+        <Button :label="__('Cancel')" @click="cancelChanges" />
+        <Button :label="__('Save Changes')" @click="saveView" />
+      </div>
       <div class="flex items-center gap-2">
+        <Button :label="__('Refresh')" @click="reload()" :loading="isLoading">
+          <template #icon>
+            <RefreshIcon class="h-4 w-4" />
+          </template>
+        </Button>
+        <GroupBy
+          v-if="route.params.viewType === 'group_by'"
+          v-model="list"
+          :doctype="doctype"
+          @update="updateGroupBy"
+        />
         <Filter
           v-model="list"
           :doctype="doctype"
@@ -34,38 +157,100 @@
         />
         <SortBy v-model="list" :doctype="doctype" @update="updateSort" />
         <ColumnSettings
+          v-if="!options.hideColumnsButton"
           v-model="list"
           :doctype="doctype"
           @update="(isDefault) => updateColumns(isDefault)"
         />
-        <Dropdown :options="viewActions">
+        <Dropdown
+          v-if="!options.hideColumnsButton"
+          :options="[
+            {
+              group: __('Options'),
+              hideLabel: true,
+              items: [
+                {
+                  label: __('Export'),
+                  icon: () =>
+                    h(FeatherIcon, { name: 'download', class: 'h-4 w-4' }),
+                  onClick: () => (showExportDialog = true),
+                },
+              ],
+            },
+          ]"
+        >
           <template #default>
-            <Button>
-              <FeatherIcon name="more-horizontal" class="h-4 w-4" />
-            </Button>
+            <Button icon="more-horizontal" />
           </template>
         </Dropdown>
       </div>
     </div>
   </div>
   <ViewModal
+    v-model="showViewModal"
+    v-model:view="viewModalObj"
     :doctype="doctype"
     :options="{
       afterCreate: async (v) => {
         await reloadView()
         viewUpdated = false
-        router.push({ name: route.name, query: { view: v.name } })
+        router.push({
+          name: route.name,
+          params: { viewType: v.type || 'list' },
+          query: { view: v.name },
+        })
       },
       afterUpdate: () => {
         viewUpdated = false
         reloadView()
       },
     }"
-    v-model:view="view"
-    v-model="showViewModal"
   />
+  <Dialog
+    v-model="showExportDialog"
+    :options="{
+      title: __('Export'),
+      actions: [
+        {
+          label: __('Download'),
+          variant: 'solid',
+          onClick: () => exportRows(),
+        },
+      ],
+    }"
+  >
+    <template #body-content>
+      <FormControl
+        variant="outline"
+        :label="__('Export Type')"
+        type="select"
+        :options="[
+          {
+            label: __('Excel'),
+            value: 'Excel',
+          },
+          {
+            label: __('CSV'),
+            value: 'CSV',
+          },
+        ]"
+        v-model="export_type"
+        :placeholder="__('Excel')"
+      />
+      <div class="mt-3">
+        <FormControl
+          type="checkbox"
+          :label="__('Export All {0} Record(s)', [list.data.total_count])"
+          v-model="export_all"
+        />
+      </div>
+    </template>
+  </Dialog>
 </template>
 <script setup>
+import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
+import QuickFilterField from '@/components/QuickFilterField.vue'
+import RefreshIcon from '@/components/Icons/RefreshIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import DuplicateIcon from '@/components/Icons/DuplicateIcon.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
@@ -73,13 +258,19 @@ import UnpinIcon from '@/components/Icons/UnpinIcon.vue'
 import ViewModal from '@/components/Modals/ViewModal.vue'
 import SortBy from '@/components/SortBy.vue'
 import Filter from '@/components/Filter.vue'
+import GroupBy from '@/components/GroupBy.vue'
+import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ColumnSettings from '@/components/ColumnSettings.vue'
 import { globalStore } from '@/stores/global'
 import { viewsStore } from '@/stores/views'
-import { useDebounceFn } from '@vueuse/core'
-import { createResource, Dropdown, call } from 'frappe-ui'
-import { computed, ref, defineModel, onMounted, watch, h } from 'vue'
+import { usersStore } from '@/stores/users'
+import { isEmoji } from '@/utils'
+import { createResource, Dropdown, call, FeatherIcon } from 'frappe-ui'
+import { computed, ref, onMounted, watch, h, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useDebounceFn } from '@vueuse/core'
+import { isMobileView } from '@/composables/settings'
+import _ from 'lodash'
 
 const props = defineProps({
   doctype: {
@@ -90,13 +281,24 @@ const props = defineProps({
     type: Object,
     default: {},
   },
+  options: {
+    type: Object,
+    default: {
+      hideColumnsButton: false,
+      defaultViewName: '',
+      allowedViews: ['list'],
+    },
+  },
 })
 
 const { $dialog } = globalStore()
 const { reload: reloadView, getView } = viewsStore()
+const { isManager } = usersStore()
 
 const list = defineModel()
 const loadMore = defineModel('loadMore')
+const resizeColumn = defineModel('resizeColumn')
+const updatedPageCount = defineModel('updatedPageCount')
 
 const route = useRoute()
 const router = useRouter()
@@ -106,23 +308,43 @@ const defaultParams = ref('')
 const viewUpdated = ref(false)
 const showViewModal = ref(false)
 
+function getViewType() {
+  let viewType = route.params.viewType || 'list'
+  let types = {
+    list: {
+      label: __('List View'),
+      icon: 'list',
+    },
+    group_by: {
+      label: __('Group By View'),
+      icon: markRaw(DetailsIcon),
+    },
+  }
+
+  return types[viewType]
+}
+
 const currentView = computed(() => {
-  let _view = getView(route.query.view)
+  let _view = getView(route.query.view, route.params.viewType, props.doctype)
   return {
-    label: _view?.label || 'List View',
-    icon: _view?.icon || 'list',
+    label:
+      _view?.label || props.options?.defaultViewName || getViewType().label,
+    icon: _view?.icon || getViewType().icon,
   }
 })
 
 const view = ref({
   name: '',
   label: '',
+  type: 'list',
+  icon: '',
   filters: {},
   order_by: 'modified desc',
   columns: '',
   rows: '',
   load_default_columns: false,
   pinned: false,
+  public: false,
 })
 
 const pageLength = computed(() => list.value?.data?.page_length)
@@ -133,16 +355,18 @@ watch(loadMore, (value) => {
   updatePageLength(value, true)
 })
 
-watch(
-  () => list.value?.data?.page_length_count,
-  (value) => {
-    if (!value) return
-    updatePageLength(value)
-  }
-)
+watch(resizeColumn, (value) => {
+  if (!value) return
+  updateColumns()
+})
+
+watch(updatedPageCount, (value) => {
+  if (!value) return
+  updatePageLength(value)
+})
 
 function getParams() {
-  let _view = getView(route.query.view)
+  let _view = getView(route.query.view, route.params.viewType, props.doctype)
   const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
   const columns = _view?.columns || ''
@@ -152,25 +376,33 @@ function getParams() {
     view.value = {
       name: _view.name,
       label: _view.label,
+      type: _view.type || 'list',
+      icon: _view.icon,
       filters: _view.filters,
       order_by: _view.order_by,
+      group_by_field: _view.group_by_field,
       columns: _view.columns,
       rows: _view.rows,
       route_name: _view.route_name,
       load_default_columns: _view.row,
       pinned: _view.pinned,
+      public: _view.public,
     }
   } else {
     view.value = {
       name: '',
-      label: '',
+      label: getViewType().label,
+      type: route.params.viewType || 'list',
+      icon: '',
       filters: {},
       order_by: 'modified desc',
+      group_by_field: 'owner',
       columns: '',
       rows: '',
-      route_name: '',
+      route_name: route.name,
       load_default_columns: true,
       pinned: false,
+      public: false,
     }
   }
 
@@ -182,7 +414,11 @@ function getParams() {
     rows: rows,
     page_length: pageLength.value,
     page_length_count: pageLengthCount.value,
-    custom_view_name: _view?.name || '',
+    view: {
+      custom_view_name: _view?.name || '',
+      view_type: _view?.type || route.params.viewType || 'list',
+      group_by_field: _view?.group_by_field || 'owner',
+    },
     default_filters: props.filters,
   }
 }
@@ -190,48 +426,93 @@ function getParams() {
 list.value = createResource({
   url: 'crm.api.doc.get_list_data',
   params: getParams(),
-  cache: [props.doctype, route.query.view],
+  cache: [props.doctype, route.query.view, route.params.viewType],
   onSuccess(data) {
-    let cv = getView(route.query.view)
-
+    let cv = getView(route.query.view, route.params.viewType, props.doctype)
+    let params = list.value.params ? list.value.params : getParams()
     defaultParams.value = {
       doctype: props.doctype,
-      filters: list.value.params.filters,
-      order_by: list.value.params.order_by,
-      page_length: list.value.params.page_length,
-      page_length_count: list.value.params.page_length_count,
+      filters: params.filters,
+      order_by: params.order_by,
+      page_length: params.page_length,
+      page_length_count: params.page_length_count,
       columns: data.columns,
       rows: data.rows,
-      custom_view_name: cv?.name || '',
+      view: {
+        custom_view_name: cv?.name || '',
+        view_type: cv?.type || route.params.viewType || 'list',
+        group_by_field: params?.view?.group_by_field || 'owner',
+      },
       default_filters: props.filters,
     }
   },
 })
 
-onMounted(() => {
-  useDebounceFn(() => reload(), 100)()
-})
+onMounted(() => useDebounceFn(reload, 100)())
+
+const isLoading = computed(() => list.value?.loading)
 
 function reload() {
   list.value.params = getParams()
   list.value.reload()
 }
 
-const defaultViews = [
-  {
-    label: 'List View',
+const showExportDialog = ref(false)
+const export_type = ref('Excel')
+const export_all = ref(false)
+
+async function exportRows() {
+  let fields = JSON.stringify(list.value.data.columns.map((f) => f.key))
+  let filters = JSON.stringify(list.value.params.filters)
+  let order_by = list.value.params.order_by
+  let page_length = list.value.params.page_length
+  if (export_all.value) {
+    page_length = list.value.data.total_count
+  }
+
+  window.location.href = `/api/method/frappe.desk.reportview.export_query?file_format_type=${export_type.value}&title=${props.doctype}&doctype=${props.doctype}&fields=${fields}&filters=${filters}&order_by=${order_by}&page_length=${page_length}&start=0&view=Report&with_comment_count=1`
+  showExportDialog.value = false
+  export_all.value = false
+  export_type.value = 'Excel'
+}
+
+let defaultViews = []
+let allowedViews = props.options.allowedViews || ['list']
+
+if (allowedViews.includes('list')) {
+  defaultViews.push({
+    label: __(props.options?.defaultViewName) || __('List View'),
     icon: 'list',
     onClick() {
       viewUpdated.value = false
       router.push({ name: route.name })
     },
-  },
-]
+  })
+}
+if (allowedViews.includes('group_by')) {
+  defaultViews.push({
+    label: __(props.options?.defaultViewName) || __('Group By View'),
+    icon: markRaw(DetailsIcon),
+    onClick() {
+      viewUpdated.value = false
+      router.push({ name: route.name, params: { viewType: 'group_by' } })
+    },
+  })
+}
+
+function getIcon(icon, type) {
+  if (isEmoji(icon)) {
+    return h('div', icon)
+  } else if (!icon && type === 'group_by') {
+    return markRaw(DetailsIcon)
+  }
+  return icon || 'list'
+}
 
 const viewsDropdownOptions = computed(() => {
   let _views = [
     {
-      group: 'Default Views',
+      group: __('Default Views'),
       hideLabel: true,
       items: defaultViews,
     },
@@ -239,33 +520,101 @@ const viewsDropdownOptions = computed(() => {
 
   if (list.value?.data?.views) {
     list.value.data.views.forEach((view) => {
-      view.icon = view.icon || 'list'
+      view.label = __(view.label)
+      view.type = view.type || 'list'
+      view.icon = getIcon(view.icon, view.type)
       view.filters =
         typeof view.filters == 'string'
           ? JSON.parse(view.filters)
           : view.filters
       view.onClick = () => {
         viewUpdated.value = false
-        router.push({ ...route, query: { view: view.name } })
+        router.push({
+          name: route.name,
+          params: { viewType: view.type },
+          query: { view: view.name },
+        })
       }
     })
-    let savedViews = list.value.data.views.filter((v) => !v.pinned)
+    let publicViews = list.value.data.views.filter((v) => v.public)
+    let savedViews = list.value.data.views.filter(
+      (v) => !v.pinned && !v.public && !v.is_default
+    )
     let pinnedViews = list.value.data.views.filter((v) => v.pinned)
+
+    publicViews.length &&
+      _views.push({
+        group: __('Public Views'),
+        items: publicViews,
+      })
 
     savedViews.length &&
       _views.push({
-        group: 'Saved Views',
+        group: __('Saved Views'),
         items: savedViews,
       })
     pinnedViews.length &&
       _views.push({
-        group: 'Pinned Views',
+        group: __('Pinned Views'),
         items: pinnedViews,
       })
   }
 
   return _views
 })
+
+const quickFilterList = computed(() => {
+  let filters = [{ name: 'name', label: __('ID') }]
+  if (quickFilters.data) {
+    filters.push(...quickFilters.data)
+  }
+
+  filters.forEach((filter) => {
+    filter['value'] = filter.type == 'Check' ? false : ''
+    if (list.value.params?.filters[filter.name]) {
+      let value = list.value.params.filters[filter.name]
+      if (Array.isArray(value)) {
+        if (
+          (['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(
+            filter.type
+          ) &&
+            value[0]?.toLowerCase() == 'like') ||
+          value[0]?.toLowerCase() != 'like'
+        )
+          return
+        filter['value'] = value[1]?.replace(/%/g, '')
+      } else {
+        filter['value'] = value.replace(/%/g, '')
+      }
+    }
+  })
+
+  return filters
+})
+
+const quickFilters = createResource({
+  url: 'crm.api.doc.get_quick_filters',
+  params: { doctype: props.doctype },
+  cache: ['Quick Filters', props.doctype],
+  auto: true,
+})
+
+function applyQuickFilter(filter, value) {
+  let filters = { ...list.value.params.filters }
+  let field = filter.name
+  if (value) {
+    if (['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(filter.type)) {
+      filters[field] = value
+    } else {
+      filters[field] = ['LIKE', `%${value}%`]
+    }
+    filter['value'] = value
+  } else {
+    delete filters[field]
+    filter['value'] = ''
+  }
+  updateFilter(filters)
+}
 
 function updateFilter(filters) {
   viewUpdated.value = true
@@ -276,6 +625,10 @@ function updateFilter(filters) {
   list.value.params.filters = filters
   view.value.filters = filters
   list.value.reload()
+
+  if (!route.query.view) {
+    create_or_update_default_view()
+  }
 }
 
 function updateSort(order_by) {
@@ -287,9 +640,39 @@ function updateSort(order_by) {
   list.value.params.order_by = order_by
   view.value.order_by = order_by
   list.value.reload()
+
+  if (!route.query.view) {
+    create_or_update_default_view()
+  }
+}
+
+function updateGroupBy(group_by_field) {
+  viewUpdated.value = true
+  if (!defaultParams.value) {
+    defaultParams.value = getParams()
+  }
+  list.value.params = defaultParams.value
+  list.value.params.view.group_by_field = group_by_field
+  view.value.group_by_field = group_by_field
+  list.value.reload()
+
+  if (!route.query.view) {
+    create_or_update_default_view()
+  }
 }
 
 function updateColumns(obj) {
+  if (!obj) {
+    obj = {
+      columns: list.value.data.columns,
+      rows: list.value.data.rows,
+      isDefault: false,
+    }
+  }
+
+  if (!defaultParams.value) {
+    defaultParams.value = getParams()
+  }
   defaultParams.value.columns = view.value.columns = obj.isDefault
     ? ''
     : obj.columns
@@ -306,6 +689,37 @@ function updateColumns(obj) {
     list.value.reload()
   }
   viewUpdated.value = true
+
+  if (!route.query.view) {
+    create_or_update_default_view()
+  }
+}
+
+function create_or_update_default_view() {
+  if (route.query.view) return
+  view.value.doctype = props.doctype
+  call(
+    'crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_default_view',
+    {
+      view: view.value,
+    }
+  ).then(() => {
+    reloadView()
+    view.value = {
+      label: view.value.label,
+      type: view.value.type || 'list',
+      icon: view.value.icon,
+      name: view.value.name,
+      filters: defaultParams.value.filters,
+      order_by: defaultParams.value.order_by,
+      group_by_field: defaultParams.value.view.group_by_field,
+      columns: defaultParams.value.columns,
+      rows: defaultParams.value.rows,
+      route_name: route.name,
+      load_default_columns: view.value.load_default_columns,
+    }
+    viewUpdated.value = false
+  })
 }
 
 function updatePageLength(value, loadMore = false) {
@@ -316,6 +730,11 @@ function updatePageLength(value, loadMore = false) {
   if (loadMore) {
     list.value.params.page_length += list.value.params.page_length_count
   } else {
+    if (
+      value == list.value.params.page_length &&
+      value == list.value.params.page_length_count
+    )
+      return
     list.value.params.page_length = value
     list.value.params.page_length_count = value
   }
@@ -326,11 +745,11 @@ function updatePageLength(value, loadMore = false) {
 const viewActions = computed(() => {
   let actions = [
     {
-      group: 'Default Views',
+      group: __('Default Views'),
       hideLabel: true,
       items: [
         {
-          label: 'Duplicate',
+          label: __('Duplicate'),
           icon: () => h(DuplicateIcon, { class: 'h-4 w-4' }),
           onClick: () => duplicateView(),
         },
@@ -338,36 +757,49 @@ const viewActions = computed(() => {
     },
   ]
 
-  if (route.query.view) {
-    actions[0].items.push(
-      {
-        label: 'Rename',
-        icon: () => h(EditIcon, { class: 'h-4 w-4' }),
-        onClick: () => renameView(),
-      },
-      {
-        label: view.value.pinned ? 'Unpin View' : 'Pin View',
+  if (route.query.view && (!view.value.public || isManager())) {
+    actions[0].items.push({
+      label: __('Edit'),
+      icon: () => h(EditIcon, { class: 'h-4 w-4' }),
+      onClick: () => editView(),
+    })
+
+    if (!view.value.public) {
+      actions[0].items.push({
+        label: view.value.pinned ? __('Unpin View') : __('Pin View'),
         icon: () =>
           h(view.value.pinned ? UnpinIcon : PinIcon, { class: 'h-4 w-4' }),
         onClick: () => pinView(),
-      }
-    )
+      })
+    }
+
+    if (isManager()) {
+      actions[0].items.push({
+        label: view.value.public ? __('Make Private') : __('Make Public'),
+        icon: () =>
+          h(FeatherIcon, {
+            name: view.value.public ? 'lock' : 'unlock',
+            class: 'h-4 w-4',
+          }),
+        onClick: () => publicView(),
+      })
+    }
 
     actions.push({
-      group: 'Delete View',
+      group: __('Delete View'),
       hideLabel: true,
       items: [
         {
-          label: 'Delete',
+          label: __('Delete'),
           icon: 'trash-2',
           onClick: () =>
             $dialog({
-              title: 'Delete View',
-              message: 'Are you sure you want to delete this view?',
+              title: __('Delete View'),
+              message: __('Are you sure you want to delete this view?'),
               variant: 'danger',
               actions: [
                 {
-                  label: 'Delete',
+                  label: __('Delete'),
                   variant: 'solid',
                   theme: 'red',
                   onClick: (close) => deleteView(close),
@@ -381,16 +813,36 @@ const viewActions = computed(() => {
   return actions
 })
 
+const viewModalObj = ref({})
+
 function duplicateView() {
+  let label =
+    __(
+      getView(route.query.view, route.params.viewType, props.doctype)?.label
+    ) || getViewType().label
   view.value.name = ''
-  view.value.label = getView(route.query.view).label + ' New'
+  view.value.label = label + __(' (New)')
+  viewModalObj.value = view.value
   showViewModal.value = true
 }
 
-function renameView() {
+function editView() {
+  let cView = getView(route.query.view, route.params.viewType, props.doctype)
   view.value.name = route.query.view
-  view.value.label = getView(route.query.view).label
+  view.value.label = __(cView?.label) || getViewType().label
+  view.value.icon = cView?.icon || ''
+  viewModalObj.value = view.value
   showViewModal.value = true
+}
+
+function publicView() {
+  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.public', {
+    name: route.query.view,
+    value: !view.value.public,
+  }).then(() => {
+    view.value.public = !view.value.public
+    reloadView()
+  })
 }
 
 function pinView() {
@@ -421,32 +873,86 @@ function cancelChanges() {
 function saveView() {
   view.value = {
     label: view.value.label,
+    type: view.value.type || 'list',
+    icon: view.value.icon,
     name: view.value.name,
     filters: defaultParams.value.filters,
     order_by: defaultParams.value.order_by,
+    group_by_field: defaultParams.value.view.group_by_field,
     columns: defaultParams.value.columns,
     rows: defaultParams.value.rows,
     route_name: route.name,
     load_default_columns: view.value.load_default_columns,
   }
+  viewModalObj.value = view.value
   showViewModal.value = true
 }
 
+function applyFilter({ event, idx, column, item, firstColumn }) {
+  let restrictedFieldtypes = ['Duration', 'Datetime', 'Time']
+  if (restrictedFieldtypes.includes(column.type) || idx === 0) return
+  if (idx === 1 && firstColumn.key == '_liked_by') return
+
+  event.stopPropagation()
+  event.preventDefault()
+
+  let filters = { ...list.value.params.filters }
+
+  let value = item.name || item.label || item
+
+  if (value) {
+    filters[column.key] = value
+  } else {
+    delete filters[column.key]
+  }
+
+  if (column.key == '_assign') {
+    if (item.length > 1) {
+      let target = event.target.closest('.user-avatar')
+      if (target) {
+        let name = target.getAttribute('data-name')
+        filters['_assign'] = ['LIKE', `%${name}%`]
+      }
+    } else {
+      filters['_assign'] = ['LIKE', `%${item[0].name}%`]
+    }
+  }
+  updateFilter(filters)
+}
+
+function applyLikeFilter() {
+  let filters = { ...list.value.params.filters }
+  if (!filters._liked_by) {
+    filters['_liked_by'] = ['LIKE', '%@me%']
+  } else {
+    delete filters['_liked_by']
+  }
+  updateFilter(filters)
+}
+
+function likeDoc({ name, liked }) {
+  createResource({
+    url: 'frappe.desk.like.toggle_like',
+    params: { doctype: props.doctype, name: name, add: liked ? 'No' : 'Yes' },
+    auto: true,
+    onSuccess: () => reload(),
+  })
+}
+
+defineExpose({ applyFilter, applyLikeFilter, likeDoc })
+
 // Watchers
 watch(
-  () => getView(route.query.view),
+  () => getView(route.query.view, route.params.viewType, props.doctype),
   (value, old_value) => {
-    if (JSON.stringify(value) === JSON.stringify(old_value)) return
+    if (_.isEqual(value, old_value)) return
     reload()
   },
   { deep: true }
 )
 
-watch(
-  () => route,
-  (value, old_value) => {
-    if (value === old_value) return
-    reload()
-  }
-)
+watch([() => route, () => route.params.viewType], (value, old_value) => {
+  if (value[0] === old_value[0] && value[1] === value[0]) return
+  reload()
+})
 </script>

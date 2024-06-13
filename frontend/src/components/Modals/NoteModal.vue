@@ -2,30 +2,51 @@
   <Dialog
     v-model="show"
     :options="{
-      title: editMode ? 'Edit Note' : 'Create Note',
       size: 'xl',
       actions: [
         {
-          label: editMode ? 'Update' : 'Create',
+          label: editMode ? __('Update') : __('Create'),
           variant: 'solid',
           onClick: () => updateNote(),
         },
       ],
     }"
   >
+    <template #body-title>
+      <div class="flex items-center gap-3">
+        <h3 class="text-2xl font-semibold leading-6 text-gray-900">
+          {{ editMode ? __('Edit Note') : __('Create Note') }}
+        </h3>
+        <Button
+          v-if="_note?.reference_docname"
+          variant="outline"
+          size="sm"
+          :label="
+            _note.reference_doctype == 'CRM Deal'
+              ? __('Open Deal')
+              : __('Open Lead')
+          "
+          @click="redirect()"
+        >
+          <template #suffix>
+            <ArrowUpRightIcon class="h-4 w-4" />
+          </template>
+        </Button>
+      </div>
+    </template>
     <template #body-content>
       <div class="flex flex-col gap-4">
         <div>
-          <div class="mb-1.5 text-sm text-gray-600">Title</div>
+          <div class="mb-1.5 text-sm text-gray-600">{{ __('Title') }}</div>
           <TextInput
             ref="title"
             variant="outline"
             v-model="_note.title"
-            placeholder="Add title"
+            :placeholder="__('Call with John Doe')"
           />
         </div>
         <div>
-          <div class="mb-1.5 text-sm text-gray-600">Content</div>
+          <div class="mb-1.5 text-sm text-gray-600">{{ __('Content') }}</div>
           <TextEditor
             variant="outline"
             ref="content"
@@ -33,7 +54,9 @@
             :bubbleMenu="true"
             :content="_note.content"
             @change="(val) => (_note.content = val)"
-            placeholder="Type a Content"
+            :placeholder="
+              __('Took a call with John Doe and discussed the new project.')
+            "
           />
         </div>
       </div>
@@ -42,8 +65,10 @@
 </template>
 
 <script setup>
+import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import { TextEditor, call } from 'frappe-ui'
-import { ref, defineModel, nextTick, watch } from 'vue'
+import { ref, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 const props = defineProps({
   note: {
@@ -65,6 +90,8 @@ const notes = defineModel('reloadNotes')
 
 const emit = defineEmits(['after'])
 
+const router = useRouter()
+
 const title = ref(null)
 const editMode = ref(false)
 let _note = ref({})
@@ -78,7 +105,7 @@ async function updateNote() {
 
   if (_note.value.name) {
     let d = await call('frappe.client.set_value', {
-      doctype: 'CRM Note',
+      doctype: 'FCRM Note',
       name: _note.value.name,
       fieldname: _note.value,
     })
@@ -89,7 +116,7 @@ async function updateNote() {
   } else {
     let d = await call('frappe.client.insert', {
       doc: {
-        doctype: 'CRM Note',
+        doctype: 'FCRM Note',
         title: _note.value.title,
         content: _note.value.content,
         reference_doctype: props.doctype,
@@ -98,10 +125,20 @@ async function updateNote() {
     })
     if (d.name) {
       notes.value?.reload()
-      emit('after', d)
+      emit('after', d, true)
     }
   }
   show.value = false
+}
+
+function redirect() {
+  if (!props.note?.reference_docname) return
+  let name = props.note.reference_doctype == 'CRM Deal' ? 'Deal' : 'Lead'
+  let params = { leadId: props.note.reference_docname }
+  if (name == 'Deal') {
+    params = { dealId: props.note.reference_docname }
+  }
+  router.push({ name: name, params: params })
 }
 
 watch(
@@ -112,7 +149,7 @@ watch(
     nextTick(() => {
       title.value.el.focus()
       _note.value = { ...props.note }
-      if (_note.value.title) {
+      if (_note.value.title || _note.value.content) {
         editMode.value = true
       }
     })

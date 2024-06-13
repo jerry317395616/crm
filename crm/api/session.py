@@ -3,12 +3,9 @@ import frappe
 
 @frappe.whitelist()
 def get_users():
-	if frappe.session.user == "Guest":
-		frappe.throw("Authentication failed", exc=frappe.AuthenticationError)
-
 	users = frappe.qb.get_query(
 		"User",
-		fields=["name", "email", "enabled", "user_image", "full_name", "user_type"],
+		fields=["name", "email", "enabled", "user_image", "first_name", "last_name", "full_name", "user_type"],
 		order_by="full_name asc",
 		distinct=True,
 	).run(as_dict=1)
@@ -16,13 +13,14 @@ def get_users():
 	for user in users:
 		if frappe.session.user == user.name:
 			user.session_user = True
+
+		user.is_manager = (
+			"Sales Manager" in frappe.get_roles(user.name) or user.name == "Administrator"
+		)
 	return users
 
 @frappe.whitelist()
 def get_contacts():
-	if frappe.session.user == "Guest":
-		frappe.throw("Authentication failed", exc=frappe.AuthenticationError)
-
 	contacts = frappe.get_all(
 		"Contact",
 		fields=[
@@ -49,22 +47,19 @@ def get_contacts():
 		contact["email_ids"] = frappe.get_all(
 			"Contact Email",
 			filters={"parenttype": "Contact", "parent": contact.name},
-			fields=["email_id", "is_primary"],
+			fields=["name", "email_id", "is_primary"],
 		)
 
 		contact["phone_nos"] = frappe.get_all(
 			"Contact Phone",
 			filters={"parenttype": "Contact", "parent": contact.name},
-			fields=["phone", "is_primary_phone", "is_primary_mobile_no"],
+			fields=["name", "phone", "is_primary_phone", "is_primary_mobile_no"],
 		)
 
 	return contacts
 
 @frappe.whitelist()
 def get_lead_contacts():
-	if frappe.session.user == "Guest":
-		frappe.throw("Authentication failed", exc=frappe.AuthenticationError)
-
 	lead_contacts = frappe.get_all(
 		"CRM Lead",
 		fields=[
@@ -75,6 +70,7 @@ def get_lead_contacts():
 			"image",
 			"modified"
 		],
+		filters={"converted": 0},
 		order_by="lead_name asc",
 		distinct=True,
 	)
@@ -83,9 +79,6 @@ def get_lead_contacts():
 
 @frappe.whitelist()
 def get_organizations():
-	if frappe.session.user == "Guest":
-		frappe.throw("Authentication failed", exc=frappe.AuthenticationError)
-
 	organizations = frappe.qb.get_query(
 		"CRM Organization",
 		fields=['*'],

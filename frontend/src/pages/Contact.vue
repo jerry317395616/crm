@@ -1,36 +1,36 @@
 <template>
-  <LayoutHeader v-if="contact">
+  <LayoutHeader v-if="contact.data">
     <template #left-header>
       <Breadcrumbs :items="breadcrumbs" />
     </template>
   </LayoutHeader>
-  <div class="flex h-full flex-col overflow-hidden">
+  <div v-if="contact.data" class="flex h-full flex-col overflow-hidden">
     <FileUploader @success="changeContactImage" :validateFile="validateFile">
       <template #default="{ openFileSelector, error }">
-        <div class="flex items-center justify-start gap-6 p-5">
+        <div class="flex items-start justify-start gap-6 p-5 sm:items-center">
           <div class="group relative h-24 w-24">
             <Avatar
               size="3xl"
               class="h-24 w-24"
-              :label="contact.full_name"
-              :image="contact.image"
+              :label="contact.data.full_name"
+              :image="contact.data.image"
             />
             <component
-              :is="contact.image ? Dropdown : 'div'"
+              :is="contact.data.image ? Dropdown : 'div'"
               v-bind="
-                contact.image
+                contact.data.image
                   ? {
                       options: [
                         {
                           icon: 'upload',
-                          label: contact.image
-                            ? 'Change image'
-                            : 'Upload image',
+                          label: contact.data.image
+                            ? __('Change image')
+                            : __('Upload image'),
                           onClick: openFileSelector,
                         },
                         {
                           icon: 'trash-2',
-                          label: 'Remove image',
+                          label: __('Remove image'),
                           onClick: () => changeContactImage(''),
                         },
                       ],
@@ -50,67 +50,80 @@
               </div>
             </component>
           </div>
-          <div class="flex flex-col gap-0.5 truncate">
-            <Tooltip :text="contact.full_name">
-              <div class="truncate text-3xl font-semibold">
-                <span v-if="contact.salutation">
-                  {{ contact.salutation + '. ' }}
-                </span>
-                <span>{{ contact.full_name }}</span>
-              </div>
-            </Tooltip>
-            <div class="flex items-center gap-2 text-base text-gray-700">
-              <div v-if="contact.email_id" class="flex items-center gap-1.5">
+          <div class="flex flex-col gap-2 truncate sm:gap-0.5">
+            <div class="truncate text-3xl font-semibold">
+              <span v-if="contact.data.salutation">
+                {{ contact.data.salutation + '. ' }}
+              </span>
+              <span>{{ contact.data.full_name }}</span>
+            </div>
+            <div
+              class="flex flex-col flex-wrap gap-3 text-base text-gray-700 sm:flex-row sm:items-center sm:gap-2"
+            >
+              <div
+                v-if="contact.data.email_id"
+                class="flex items-center gap-1.5"
+              >
                 <EmailIcon class="h-4 w-4" />
-                <span class="">{{ contact.email_id }}</span>
+                <span class="">{{ contact.data.email_id }}</span>
               </div>
               <span
-                v-if="contact.email_id"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="contact.data.email_id"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
-              <Tooltip text="Make Call" v-if="contact.mobile_no">
+              <component
+                :is="callEnabled ? Tooltip : 'div'"
+                :text="__('Make Call')"
+                v-if="contact.data.actual_mobile_no"
+              >
                 <div
-                  class="flex cursor-pointer items-center gap-1.5"
-                  @click="makeCall(contact.mobile_no)"
+                  class="flex items-center gap-1.5"
+                  :class="callEnabled ? 'cursor-pointer' : ''"
+                  @click="
+                    callEnabled && makeCall(contact.data.actual_mobile_no)
+                  "
                 >
                   <PhoneIcon class="h-4 w-4" />
-                  <span class="">{{ contact.mobile_no }}</span>
+                  <span class="">{{ contact.data.actual_mobile_no }}</span>
                 </div>
-              </Tooltip>
+              </component>
               <span
-                v-if="contact.mobile_no"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="contact.data.actual_mobile_no"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
               <div
-                v-if="contact.company_name"
+                v-if="contact.data.company_name"
                 class="flex items-center gap-1.5"
               >
                 <Avatar
                   size="xs"
-                  :label="contact.company_name"
+                  :label="contact.data.company_name"
                   :image="
-                    getOrganization(contact.company_name)?.organization_logo
+                    getOrganization(contact.data.company_name)
+                      ?.organization_logo
                   "
                 />
-                <span class="">{{ contact.company_name }}</span>
+                <span class="">{{ contact.data.company_name }}</span>
               </div>
               <span
-                v-if="contact.company_name"
-                class="text-3xl leading-[0] text-gray-600"
+                v-if="contact.data.company_name"
+                class="hidden text-3xl leading-[0] text-gray-600 sm:flex"
               >
                 &middot;
               </span>
               <Button
                 v-if="
-                  contact.email_id || contact.mobile_no || contact.company_name
+                  contact.data.email_id ||
+                  contact.data.mobile_no ||
+                  contact.data.company_name
                 "
                 variant="ghost"
-                label="More"
-                class="-ml-1 cursor-pointer hover:text-gray-900"
+                :label="__('More')"
+                class="w-fit cursor-pointer hover:text-gray-900 sm:-ml-1"
                 @click="
                   () => {
                     detailMode = true
@@ -121,7 +134,7 @@
             </div>
             <div class="mt-2 flex gap-1.5">
               <Button
-                label="Edit"
+                :label="__('Edit')"
                 size="sm"
                 @click="
                   () => {
@@ -135,7 +148,7 @@
                 </template>
               </Button>
               <Button
-                label="Delete"
+                :label="__('Delete')"
                 theme="red"
                 size="sm"
                 @click="deleteContact"
@@ -145,7 +158,7 @@
                 </template>
               </Button>
             </div>
-            <ErrorMessage :message="error" />
+            <ErrorMessage :message="__(error)" />
           </div>
         </div>
       </template>
@@ -157,7 +170,7 @@
           :class="{ 'text-gray-900': selected }"
         >
           <component v-if="tab.icon" :is="tab.icon" class="h-5" />
-          {{ tab.label }}
+          {{ __(tab.label) }}
           <Badge
             class="group-hover:bg-gray-900"
             :class="[selected ? 'bg-gray-900' : 'bg-gray-600']"
@@ -175,7 +188,7 @@
           class="mt-4"
           :rows="rows"
           :columns="columns"
-          :options="{ selectable: false }"
+          :options="{ selectable: false, showTooltip: false }"
         />
         <div
           v-if="!rows.length"
@@ -183,7 +196,7 @@
         >
           <div class="flex flex-col items-center justify-center space-y-3">
             <component :is="tab.icon" class="!h-10 !w-10" />
-            <div>No {{ tab.label }} Found</div>
+            <div>{{ __('No {0} Found', [__(tab.label)]) }}</div>
           </div>
         </div>
       </template>
@@ -223,15 +236,14 @@ import {
 } from '@/utils'
 import { globalStore } from '@/stores/global.js'
 import { usersStore } from '@/stores/users.js'
-import { contactsStore } from '@/stores/contacts.js'
 import { organizationsStore } from '@/stores/organizations.js'
 import { statusesStore } from '@/stores/statuses'
+import { callEnabled } from '@/composables/settings'
 import { ref, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 
 const { $dialog, makeCall } = globalStore()
 
-const { getContactByName, contacts } = contactsStore()
 const { getUser } = usersStore()
 const { getOrganization } = organizationsStore()
 const { getDealStatus } = statusesStore()
@@ -245,16 +257,14 @@ const props = defineProps({
 
 const router = useRouter()
 
-const contact = computed(() => getContactByName(props.contactId))
-
 const showContactModal = ref(false)
 const detailMode = ref(false)
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: 'Contacts', route: { name: 'Contacts' } }]
+  let items = [{ label: __('Contacts'), route: { name: 'Contacts' } }]
   items.push({
-    label: contact.value.full_name,
-    route: { name: 'Contact', params: { contactId: contact.value.name } },
+    label: contact.data?.full_name,
+    route: { name: 'Contact', params: { contactId: props.contactId } },
   })
   return items
 })
@@ -262,7 +272,7 @@ const breadcrumbs = computed(() => {
 function validateFile(file) {
   let extn = file.name.split('.').pop().toLowerCase()
   if (!['png', 'jpg', 'jpeg'].includes(extn)) {
-    return 'Only PNG and JPG images are allowed'
+    return __('Only PNG and JPG images are allowed')
   }
 }
 
@@ -273,16 +283,16 @@ async function changeContactImage(file) {
     fieldname: 'image',
     value: file?.file_url || '',
   })
-  contacts.reload()
+  contact.reload()
 }
 
 async function deleteContact() {
   $dialog({
-    title: 'Delete contact',
-    message: 'Are you sure you want to delete this contact?',
+    title: __('Delete contact'),
+    message: __('Are you sure you want to delete this contact?'),
     actions: [
       {
-        label: 'Delete',
+        label: __('Delete'),
         theme: 'red',
         variant: 'solid',
         async onClick(close) {
@@ -306,6 +316,22 @@ const tabs = [
     count: computed(() => deals.data?.length),
   },
 ]
+
+const contact = createResource({
+  url: 'crm.api.contact.get_contact',
+  cache: ['contact', props.contactId],
+  params: {
+    name: props.contactId,
+  },
+  auto: true,
+  transform: (data) => {
+    return {
+      ...data,
+      actual_mobile_no: data.mobile_no,
+      mobile_no: data.mobile_no,
+    }
+  },
+})
 
 const deals = createResource({
   url: 'crm.api.contact.get_linked_deals',
@@ -344,44 +370,44 @@ function getDealRowObject(deal) {
     },
     modified: {
       label: dateFormat(deal.modified, dateTooltipFormat),
-      timeAgo: timeAgo(deal.modified),
+      timeAgo: __(timeAgo(deal.modified)),
     },
   }
 }
 
 const dealColumns = [
   {
-    label: 'Organization',
+    label: __('Organization'),
     key: 'organization',
     width: '11rem',
   },
   {
-    label: 'Amount',
+    label: __('Amount'),
     key: 'annual_revenue',
     width: '9rem',
   },
   {
-    label: 'Status',
+    label: __('Status'),
     key: 'status',
     width: '10rem',
   },
   {
-    label: 'Email',
+    label: __('Email'),
     key: 'email',
     width: '12rem',
   },
   {
-    label: 'Mobile no',
+    label: __('Mobile no'),
     key: 'mobile_no',
     width: '11rem',
   },
   {
-    label: 'Deal owner',
+    label: __('Deal owner'),
     key: 'deal_owner',
     width: '10rem',
   },
   {
-    label: 'Last modified',
+    label: __('Last modified'),
     key: 'modified',
     width: '8rem',
   },

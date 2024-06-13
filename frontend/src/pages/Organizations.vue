@@ -4,9 +4,13 @@
       <Breadcrumbs :items="breadcrumbs" />
     </template>
     <template #right-header>
+      <CustomActions
+        v-if="organizationsListView?.customListActions"
+        :actions="organizationsListView.customListActions"
+      />
       <Button
         variant="solid"
-        label="Create"
+        :label="__('Create')"
         @click="showOrganizationModal = true"
       >
         <template #prefix><FeatherIcon name="plus" class="h-4" /></template>
@@ -14,20 +18,32 @@
     </template>
   </LayoutHeader>
   <ViewControls
+    ref="viewControls"
     v-model="organizations"
     v-model:loadMore="loadMore"
+    v-model:resizeColumn="triggerResize"
+    v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Organization"
   />
   <OrganizationsListView
+    ref="organizationsListView"
     v-if="organizations.data && rows.length"
     v-model="organizations.data.page_length_count"
+    v-model:list="organizations"
     :rows="rows"
     :columns="organizations.data.columns"
     :options="{
+      showTooltip: false,
+      resizeColumn: true,
       rowCount: organizations.data.row_count,
       totalCount: organizations.data.total_count,
     }"
     @loadMore="() => loadMore++"
+    @columnWidthUpdated="() => triggerResize++"
+    @updatePageCount="(count) => (updatedPageCount = count)"
+    @applyFilter="(data) => viewControls.applyFilter(data)"
+    @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
+    @likeDoc="(data) => viewControls.likeDoc(data)"
   />
   <div
     v-else-if="organizations.data"
@@ -37,15 +53,16 @@
       class="flex flex-col items-center gap-3 text-xl font-medium text-gray-500"
     >
       <OrganizationsIcon class="h-10 w-10" />
-      <span>No Organizations Found</span>
-      <Button label="Create" @click="showOrganizationModal = true">
+      <span>{{ __('No {0} Found', [__('Organizations')]) }}</span>
+      <Button :label="__('Create')" @click="showOrganizationModal = true">
         <template #prefix><FeatherIcon name="plus" class="h-4" /></template>
       </Button>
     </div>
   </div>
-  <OrganizationModal v-model="showOrganizationModal" :organization="{}" />
+  <OrganizationModal v-model="showOrganizationModal" />
 </template>
 <script setup>
+import CustomActions from '@/components/CustomActions.vue'
 import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
@@ -63,6 +80,7 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
+const organizationsListView = ref(null)
 const showOrganizationModal = ref(false)
 
 const currentOrganization = computed(() => {
@@ -72,10 +90,10 @@ const currentOrganization = computed(() => {
 })
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: 'Organizations', route: { name: 'Organizations' } }]
+  let items = [{ label: __('Organizations'), route: { name: 'Organizations' } }]
   if (!currentOrganization.value) return items
   items.push({
-    label: currentOrganization.value.name,
+    label: __(currentOrganization.value.name),
     route: {
       name: 'Organization',
       params: { organizationId: currentOrganization.value.name },
@@ -87,6 +105,9 @@ const breadcrumbs = computed(() => {
 // organizations data is loaded in the ViewControls component
 const organizations = ref({})
 const loadMore = ref(1)
+const triggerResize = ref(1)
+const updatedPageCount = ref(20)
+const viewControls = ref(null)
 
 const rows = computed(() => {
   if (!organizations.value?.data?.data) return []
@@ -107,7 +128,7 @@ const rows = computed(() => {
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = {
           label: dateFormat(organization[row], dateTooltipFormat),
-          timeAgo: timeAgo(organization[row]),
+          timeAgo: __(timeAgo(organization[row])),
         }
       }
     })
