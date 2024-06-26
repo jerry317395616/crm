@@ -77,9 +77,9 @@ const chooseExistingContact = ref(false)
 const chooseExistingOrganization = ref(false)
 
 const sections = createResource({
-  url: 'crm.api.doc.get_quick_entry_fields',
+  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['quickEntryFields', 'CRM Deal'],
-  params: { doctype: 'CRM Deal' },
+  params: { doctype: 'CRM Deal', type: 'Quick Entry'},
   auto: true,
   transform: (data) => {
     return data.forEach((section) => {
@@ -147,15 +147,15 @@ const dealStatuses = computed(() => {
 })
 
 function createDeal() {
+  if (deal.website && !deal.website.startsWith('http')) {
+    deal.website = 'https://' + deal.website
+  }
   createResource({
     url: 'crm.fcrm.doctype.crm_deal.crm_deal.create_deal',
     params: { args: deal },
     auto: true,
     validate() {
       error.value = null
-      if (deal.website && !deal.website.startsWith('http')) {
-        deal.website = 'https://' + deal.website
-      }
       if (deal.annual_revenue) {
         deal.annual_revenue = deal.annual_revenue.replace(/,/g, '')
         if (isNaN(deal.annual_revenue)) {
@@ -181,6 +181,14 @@ function createDeal() {
       isDealCreating.value = false
       show.value = false
       router.push({ name: 'Deal', params: { dealId: name } })
+    },
+    onError(err) {
+      isDealCreating.value = false
+      if (!err.messages) {
+        error.value = err.message
+        return
+      }
+      error.value = err.messages.join('\n')
     },
   })
 }
