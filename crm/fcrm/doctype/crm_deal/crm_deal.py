@@ -190,6 +190,14 @@ class CRMDeal(Document):
 		]
 		return {'columns': columns, 'rows': rows}
 
+	@staticmethod
+	def default_kanban_settings():
+		return {
+			"column_field": "status",
+			"title_field": "organization",
+			"kanban_fields": '["annual_revenue", "email", "mobile_no", "_assign", "modified"]'
+		}
+
 @frappe.whitelist()
 def add_contact(deal, contact):
 	if not frappe.has_permission("CRM Deal", "write", deal):
@@ -290,8 +298,11 @@ def create_deal(args):
 	deal.update({
 		"organization": args.get("organization") or create_organization(args),
 		"contacts": [{"contact": contact, "is_primary": 1}] if contact else [],
-		"deal_owner": args.get("deal_owner"),
-		"status": args.get("status"),
 	})
+
+	args.pop("organization", None)
+
+	deal.update(args)
+
 	deal.insert(ignore_permissions=True)
 	return deal.name

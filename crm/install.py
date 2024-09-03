@@ -16,6 +16,8 @@ def after_install():
 	add_default_fields_layout()
 	add_property_setter()
 	add_email_template_custom_fields()
+	add_default_industries()
+	add_default_lead_sources()
 	frappe.db.commit()
 
 def add_default_lead_statuses():
@@ -110,7 +112,7 @@ def add_default_communication_statuses():
 		doc.insert()
 
 def add_default_fields_layout():
-	layouts = {
+	quick_entry_layouts = {
 		"CRM Lead-Quick Entry": {
 			"doctype": "CRM Lead",
 			"layout": '[{"label":"Person","fields":["salutation","first_name","last_name","email","mobile_no", "gender"],"hideLabel":true},{"label":"Organization","fields":["organization","website","no_of_employees","territory","annual_revenue","industry"],"hideLabel":true,"hideBorder":false},{"label":"Other","columns":2,"fields":["status","lead_owner"],"hideLabel":true,"hideBorder":false}]'
@@ -123,20 +125,41 @@ def add_default_fields_layout():
 			"doctype": "Contact",
 			"layout": '[{"label":"Salutation","columns":1,"fields":["salutation"],"hideLabel":true},{"label":"Full Name","columns":2,"hideBorder":true,"fields":["first_name","last_name"],"hideLabel":true},{"label":"Email","columns":1,"hideBorder":true,"fields":["email_id"],"hideLabel":true},{"label":"Mobile No. & Gender","columns":2,"hideBorder":true,"fields":["mobile_no","gender"],"hideLabel":true},{"label":"Organization","columns":1,"hideBorder":true,"fields":["company_name"],"hideLabel":true},{"label":"Designation","columns":1,"hideBorder":true,"fields":["designation"],"hideLabel":true}]'
 		},
-		"Organization-Quick Entry": {
+		"CRM Organization-Quick Entry": {
 			"doctype": "CRM Organization",
 			"layout": '[{"label":"Organization Name","columns":1,"fields":["organization_name"],"hideLabel":true},{"label":"Website & Revenue","columns":2,"hideBorder":true,"fields":["website","annual_revenue"],"hideLabel":true},{"label":"Territory","columns":1,"hideBorder":true,"fields":["territory"],"hideLabel":true},{"label":"No of Employees & Industry","columns":2,"hideBorder":true,"fields":["no_of_employees","industry"],"hideLabel":true}]'
 		},
 	}
 
-	for layout in layouts:
+	sidebar_fields_layouts = {
+		"CRM Lead-Side Panel": {
+			"doctype": "CRM Lead",
+			"layout": '[{"label": "Details", "name": "details", "opened": true, "fields": ["organization", "website", "territory", "industry", "job_title", "source", "lead_owner"]}, {"label": "Person", "name": "person_tab", "opened": true, "fields": ["salutation", "first_name", "last_name", "email", "mobile_no"]}]'
+		},
+		"CRM Deal-Side Panel": {
+			"doctype": "CRM Deal",
+			"layout": '[{"label":"Contacts","name":"contacts_section","opened":true,"editable":false,"contacts":[]},{"label":"Organization Details","name":"organization_tab","opened":true,"fields":["organization","website","territory","annual_revenue","close_date","probability","next_step","deal_owner"]}]'
+		},
+	}
+
+	for layout in quick_entry_layouts:
 		if frappe.db.exists("CRM Fields Layout", layout):
 			continue
 
 		doc = frappe.new_doc("CRM Fields Layout")
 		doc.type = "Quick Entry"
-		doc.dt = layouts[layout]["doctype"]
-		doc.layout = layouts[layout]["layout"]
+		doc.dt = quick_entry_layouts[layout]["doctype"]
+		doc.layout = quick_entry_layouts[layout]["layout"]
+		doc.insert()
+
+	for layout in sidebar_fields_layouts:
+		if frappe.db.exists("CRM Fields Layout", layout):
+			continue
+
+		doc = frappe.new_doc("CRM Fields Layout")
+		doc.type = "Side Panel"
+		doc.dt = sidebar_fields_layouts[layout]["doctype"]
+		doc.layout = sidebar_fields_layouts[layout]["layout"]
 		doc.insert()
 
 def add_property_setter():
@@ -175,3 +198,28 @@ def add_email_template_custom_fields():
 		)
 
 		frappe.clear_cache(doctype="Email Template")
+
+
+def add_default_industries():
+	industries = ["Accounting", "Advertising", "Aerospace", "Agriculture", "Airline", "Apparel & Accessories", "Automotive", "Banking", "Biotechnology", "Broadcasting", "Brokerage", "Chemical", "Computer", "Consulting", "Consumer Products", "Cosmetics", "Defense", "Department Stores", "Education", "Electronics", "Energy", "Entertainment & Leisure, Executive Search", "Financial Services", "Food", "Beverage & Tobacco", "Grocery", "Health Care", "Internet Publishing", "Investment Banking", "Legal", "Manufacturing", "Motion Picture & Video", "Music", "Newspaper Publishers", "Online Auctions", "Pension Funds", "Pharmaceuticals", "Private Equity", "Publishing", "Real Estate", "Retail & Wholesale", "Securities & Commodity Exchanges", "Service", "Soap & Detergent", "Software", "Sports", "Technology", "Telecommunications", "Television", "Transportation", "Venture Capital"]
+
+	for industry in industries:
+		if frappe.db.exists("CRM Industry", industry):
+			continue
+
+		doc = frappe.new_doc("CRM Industry")
+		doc.industry = industry
+		doc.insert()
+
+
+def add_default_lead_sources():
+
+	lead_sources = ["Existing Customer", "Reference", "Advertisement", "Cold Calling", "Exhibition", "Supplier Reference", "Mass Mailing", "Customer's Vendor", "Campaign", "Walk In"]
+
+	for source in lead_sources:
+		if frappe.db.exists("CRM Lead Source", source):
+			continue
+
+		doc = frappe.new_doc("CRM Lead Source")
+		doc.source_name = source
+		doc.insert()

@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader v-if="lead.data">
     <template #left-header>
-      <Breadcrumbs :items="breadcrumbs" />
+      <Breadcrumbs :items="breadcrumbs">
+        <template #prefix="{ item }">
+          <Icon v-if="item.icon" :icon="item.icon" class="mr-2 h-4" />
+        </template>
+      </Breadcrumbs>
     </template>
     <template #right-header>
       <CustomActions
@@ -128,7 +132,7 @@
                 </Tooltip>
                 <Tooltip :text="__('Send an email')">
                   <Button class="h-7 w-7">
-                    <EmailIcon
+                    <Email2Icon
                       class="h-4 w-4"
                       @click="
                         lead.data.email
@@ -178,6 +182,15 @@
                 v-model="lead.data"
                 @update="updateField"
               />
+              <template v-if="i == 0 && isManager()" #actions>
+                <Button
+                  variant="ghost"
+                  class="w-7 mr-2"
+                  @click="showSidePanelModal = true"
+                >
+                  <EditIcon class="h-4 w-4" />
+                </Button>
+              </template>
             </Section>
           </div>
         </div>
@@ -185,11 +198,11 @@
     </Resizer>
   </div>
   <AssignmentModal
-    v-if="lead.data"
-    :doc="lead.data"
-    doctype="CRM Lead"
+    v-if="showAssignmentModal"
     v-model="showAssignmentModal"
     v-model:assignees="lead.data._assignedTo"
+    :doc="lead.data"
+    doctype="CRM Lead"
   />
   <Dialog
     v-model="showConvertToDealModal"
@@ -227,7 +240,7 @@
         <div v-else class="mt-2.5 text-base">
           {{
             __(
-              'New organization will be created based on the data in details section'
+              'New organization will be created based on the data in details section',
             )
           }}
         </div>
@@ -257,11 +270,19 @@
       </div>
     </template>
   </Dialog>
+  <SidePanelModal
+    v-if="showSidePanelModal"
+    v-model="showSidePanelModal"
+    @reload="() => fieldsLayout.reload()"
+  />
 </template>
 <script setup>
+import Icon from '@/components/Icon.vue'
 import Resizer from '@/components/Resizer.vue'
+import EditIcon from '@/components/Icons/EditIcon.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import Email2Icon from '@/components/Icons/Email2Icon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
@@ -273,8 +294,9 @@ import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
-import Activities from '@/components/Activities.vue'
+import Activities from '@/components/Activities/Activities.vue'
 import AssignmentModal from '@/components/Modals/AssignmentModal.vue'
+import SidePanelModal from '@/components/Settings/SidePanelModal.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import Link from '@/components/Controls/Link.vue'
 import Section from '@/components/Section.vue'
@@ -289,11 +311,14 @@ import {
   errorMessage,
   copyToClipboard,
 } from '@/utils'
+import { getView } from '@/utils/view'
 import { globalStore } from '@/stores/global'
 import { contactsStore } from '@/stores/contacts'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
+import { usersStore } from '@/stores/users'
 import { whatsappEnabled, callEnabled } from '@/composables/settings'
+import { capture } from '@/telemetry'
 import {
   createResource,
   FileUploader,
@@ -304,6 +329,7 @@ import {
   Switch,
   Breadcrumbs,
   call,
+  usePageMeta,
 } from 'frappe-ui'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -312,6 +338,7 @@ const { $dialog, makeCall } = globalStore()
 const { getContactByName, contacts } = contactsStore()
 const { organizations } = organizationsStore()
 const { statusOptions, getLeadStatus } = statusesStore()
+const { isManager } = usersStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -347,6 +374,7 @@ onMounted(() => {
 
 const reload = ref(false)
 const showAssignmentModal = ref(false)
+const showSidePanelModal = ref(false)
 
 function updateLead(fieldname, value, callback) {
   value = Array.isArray(fieldname) ? '' : value
@@ -399,11 +427,33 @@ function validateRequired(fieldname, value) {
 
 const breadcrumbs = computed(() => {
   let items = [{ label: __('Leads'), route: { name: 'Leads' } }]
+
+  if (route.query.view || route.query.viewType) {
+    let view = getView(route.query.view, route.query.viewType, 'CRM Lead')
+    if (view) {
+      items.push({
+        label: __(view.label),
+        icon: view.icon,
+        route: {
+          name: 'Leads',
+          params: { viewType: route.query.viewType },
+          query: { view: route.query.view },
+        },
+      })
+    }
+  }
+
   items.push({
     label: lead.data.lead_name || __('Untitled'),
     route: { name: 'Lead', params: { leadId: lead.data.name } },
   })
   return items
+})
+
+usePageMeta(() => {
+  return {
+    title: lead.data?.lead_name || lead.data?.name,
+  }
 })
 
 const tabIndex = ref(0)
@@ -454,7 +504,7 @@ const tabs = computed(() => {
 watch(tabs, (value) => {
   if (value && route.params.tabName) {
     let index = value.findIndex(
-      (tab) => tab.name.toLowerCase() === route.params.tabName.toLowerCase()
+      (tab) => tab.name.toLowerCase() === route.params.tabName.toLowerCase(),
     )
     if (index !== -1) {
       tabIndex.value = index
@@ -549,7 +599,7 @@ async function convertToDeal(updated) {
         organization: lead.data.organization,
       },
       '',
-      () => convertToDeal(true)
+      () => convertToDeal(true),
     )
     showConvertToDealModal.value = false
   } else {
@@ -557,9 +607,10 @@ async function convertToDeal(updated) {
       'crm.fcrm.doctype.crm_lead.crm_lead.convert_to_deal',
       {
         lead: lead.data.name,
-      }
+      },
     )
     if (deal) {
+      capture('convert_lead_to_deal')
       if (updated) {
         await organizations.reload()
         await contacts.reload()

@@ -9,7 +9,7 @@
         @click="toggleEmailBox()"
       >
         <template #prefix>
-          <EmailIcon class="h-4" />
+          <Email2Icon class="h-4" />
         </template>
       </Button>
       <Button
@@ -22,18 +22,6 @@
           <CommentIcon class="h-4" />
         </template>
       </Button>
-    </div>
-    <div v-if="showEmailBox" class="flex gap-1.5">
-      <Button
-        :label="__('CC')"
-        @click="toggleCC()"
-        :class="[newEmailEditor.cc ? 'bg-gray-300 hover:bg-gray-200' : '']"
-      />
-      <Button
-        :label="__('BCC')"
-        @click="toggleBCC()"
-        :class="[newEmailEditor.bcc ? 'bg-gray-300 hover:bg-gray-200' : '']"
-      />
     </div>
   </div>
   <div
@@ -99,11 +87,12 @@
 import EmailEditor from '@/components/EmailEditor.vue'
 import CommentBox from '@/components/CommentBox.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
-import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import Email2Icon from '@/components/Icons/Email2Icon.vue'
+import { capture } from '@/telemetry'
 import { usersStore } from '@/stores/users'
 import { useStorage } from '@vueuse/core'
 import { call, createResource } from 'frappe-ui'
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
   doctype: {
@@ -145,6 +134,7 @@ const signature = createResource({
 })
 
 function setSignature(editor) {
+  if (!signature.data) return
   signature.data = signature.data.replace(/\n/g, '<br>')
   let emailContent = editor.getHTML()
   emailContent = emailContent.startsWith('<p></p>')
@@ -187,6 +177,10 @@ async function sendMail() {
   let subject = newEmailEditor.value.subject
   let cc = newEmailEditor.value.ccEmails || []
   let bcc = newEmailEditor.value.bccEmails || []
+
+  if (attachments.value.length) {
+    capture('email_attachments_added')
+  }
   await call('frappe.core.doctype.communication.email.make', {
     recipients: recipients.join(', '),
     attachments: attachments.value.map((x) => x.name),
@@ -197,7 +191,7 @@ async function sendMail() {
     doctype: props.doctype,
     name: doc.value.data.name,
     send_email: 1,
-    sender: getUser().name,
+    sender: getUser().email,
     sender_full_name: getUser()?.full_name || undefined,
   })
 }
@@ -207,10 +201,11 @@ async function sendComment() {
     reference_doctype: props.doctype,
     reference_name: doc.value.data.name,
     content: newComment.value,
-    comment_email: getUser().name,
+    comment_email: getUser().email,
     comment_by: getUser()?.full_name || undefined,
   })
   if (comment && attachments.value.length) {
+    capture('comment_attachments_added')
     await call('crm.api.comment.add_attachments', {
       name: comment.name,
       attachments: attachments.value.map((x) => x.name),
@@ -225,6 +220,7 @@ async function submitEmail() {
   newEmail.value = ''
   reload.value = true
   emit('scroll')
+  capture('email_sent', { doctype: props.doctype })
 }
 
 async function submitComment() {
@@ -234,22 +230,7 @@ async function submitComment() {
   newComment.value = ''
   reload.value = true
   emit('scroll')
-}
-
-function toggleCC() {
-  newEmailEditor.value.cc = !newEmailEditor.value.cc
-  newEmailEditor.value.cc &&
-    nextTick(() => {
-      newEmailEditor.value.ccInput.setFocus()
-    })
-}
-
-function toggleBCC() {
-  newEmailEditor.value.bcc = !newEmailEditor.value.bcc
-  newEmailEditor.value.bcc &&
-    nextTick(() => {
-      newEmailEditor.value.bccInput.setFocus()
-    })
+  capture('comment_sent', { doctype: props.doctype })
 }
 
 function toggleEmailBox() {

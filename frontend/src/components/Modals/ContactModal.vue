@@ -10,10 +10,10 @@
           </div>
           <div class="flex items-center gap-1">
             <Button
-              v-if="detailMode"
+              v-if="isManager() || detailMode"
               variant="ghost"
               class="w-7"
-              @click="detailMode = false"
+              @click="detailMode ? (detailMode = false) : openQuickEntryModal()"
             >
               <EditIcon class="h-4 w-4" />
             </Button>
@@ -84,15 +84,17 @@
 import Fields from '@/components/Fields.vue'
 import ContactIcon from '@/components/Icons/ContactIcon.vue'
 import GenderIcon from '@/components/Icons/GenderIcon.vue'
-import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import Email2Icon from '@/components/Icons/Email2Icon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import AddressIcon from '@/components/Icons/AddressIcon.vue'
 import CertificateIcon from '@/components/Icons/CertificateIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import Dropdown from '@/components/frappe-ui/Dropdown.vue'
+import { usersStore } from '@/stores/users'
+import { capture } from '@/telemetry'
 import { call, createResource } from 'frappe-ui'
-import { ref, nextTick, watch, computed, h } from 'vue'
+import { ref, nextTick, watch, computed } from 'vue'
 import { createToast } from '@/utils'
 import { useRouter } from 'vue-router'
 
@@ -110,6 +112,8 @@ const props = defineProps({
     },
   },
 })
+
+const { isManager } = usersStore()
 
 const router = useRouter()
 const show = defineModel()
@@ -157,7 +161,10 @@ async function callInsertDoc() {
       ..._contact.value,
     },
   })
-  doc.name && handleContactUpdate(doc)
+  if (doc.name) {
+    capture('contact_created')
+    handleContactUpdate(doc)
+  }
 }
 
 function handleContactUpdate(doc) {
@@ -205,7 +212,7 @@ const detailFields = computed(() => {
       value: _contact.value.gender,
     },
     {
-      icon: EmailIcon,
+      icon: Email2Icon,
       name: 'email_id',
       value: _contact.value.email_id,
     },
@@ -237,7 +244,7 @@ const detailFields = computed(() => {
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['quickEntryFields', 'Contact'],
-  params: { doctype: 'Contact', type: 'Quick Entry'},
+  params: { doctype: 'Contact', type: 'Quick Entry' },
   auto: true,
 })
 
@@ -273,7 +280,7 @@ const filteredSections = computed(() => {
               onDelete: async (option, isNew) => {
                 props.contact.data.email_ids =
                   props.contact.data.email_ids.filter(
-                    (email) => email.name !== option.name
+                    (email) => email.name !== option.name,
                   )
                 !isNew && (await deleteOption('Contact Email', option.name))
                 if (_contact.value.email_id === option.value) {
@@ -281,7 +288,7 @@ const filteredSections = computed(() => {
                     _contact.value.email_id = ''
                   } else {
                     _contact.value.email_id = props.contact.data.email_ids.find(
-                      (email) => email.is_primary
+                      (email) => email.is_primary,
                     )?.email_id
                   }
                 }
@@ -296,7 +303,10 @@ const filteredSections = computed(() => {
             isNew: true,
           })
         }
-      } else if (field.name == 'mobile_no' || field.name == 'actual_mobile_no') {
+      } else if (
+        field.name == 'mobile_no' ||
+        field.name == 'actual_mobile_no'
+      ) {
         field.type = props.contact?.data?.name ? 'Dropdown' : 'Data'
         field.name = 'actual_mobile_no'
         field.options =
@@ -323,7 +333,7 @@ const filteredSections = computed(() => {
               onDelete: async (option, isNew) => {
                 props.contact.data.phone_nos =
                   props.contact.data.phone_nos.filter(
-                    (phone) => phone.name !== option.name
+                    (phone) => phone.name !== option.name,
                   )
                 !isNew && (await deleteOption('Contact Phone', option.name))
                 if (_contact.value.actual_mobile_no === option.value) {
@@ -332,7 +342,7 @@ const filteredSections = computed(() => {
                   } else {
                     _contact.value.actual_mobile_no =
                       props.contact.data.phone_nos.find(
-                        (phone) => phone.is_primary_mobile_no
+                        (phone) => phone.is_primary_mobile_no,
                       )?.phone
                   }
                 }
@@ -432,8 +442,17 @@ watch(
         editMode.value = true
       }
     })
-  }
+  },
 )
+
+const showQuickEntryModal = defineModel('quickEntry')
+
+function openQuickEntryModal() {
+  showQuickEntryModal.value = true
+  nextTick(() => {
+    show.value = false
+  })
+}
 </script>
 
 <style scoped>

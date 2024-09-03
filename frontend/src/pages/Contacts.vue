@@ -1,7 +1,7 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <Breadcrumbs :items="breadcrumbs" />
+      <ViewBreadcrumbs v-model="viewControls" routeName="Contacts" />
     </template>
     <template #right-header>
       <CustomActions
@@ -59,45 +59,35 @@
       </Button>
     </div>
   </div>
-  <ContactModal v-model="showContactModal" :contact="{}" />
+  <ContactModal
+    v-model="showContactModal"
+    v-model:quickEntry="showQuickEntryModal"
+    :contact="{}"
+  />
+  <QuickEntryModal
+    v-if="showQuickEntryModal"
+    v-model="showQuickEntryModal"
+    doctype="Contact"
+  />
 </template>
 
 <script setup>
+import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
+import QuickEntryModal from '@/components/Settings/QuickEntryModal.vue'
 import ContactsListView from '@/components/ListViews/ContactsListView.vue'
 import ViewControls from '@/components/ViewControls.vue'
-import { Breadcrumbs } from 'frappe-ui'
 import { organizationsStore } from '@/stores/organizations.js'
 import { dateFormat, dateTooltipFormat, timeAgo } from '@/utils'
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
 
 const { getOrganization } = organizationsStore()
-const route = useRoute()
 
 const showContactModal = ref(false)
-
-const currentContact = computed(() => {
-  return contacts.value?.data?.data?.find(
-    (contact) => contact.name === route.params.contactId
-  )
-})
-
-const breadcrumbs = computed(() => {
-  let items = [{ label: __('Contacts'), route: { name: 'Contacts' } }]
-  if (!currentContact.value) return items
-  items.push({
-    label: __(currentContact.value.full_name),
-    route: {
-      name: 'Contact',
-      params: { contactId: currentContact.value.name },
-    },
-  })
-  return items
-})
+const showQuickEntryModal = ref(false)
 
 const contactsListView = ref(null)
 
@@ -109,7 +99,11 @@ const updatedPageCount = ref(20)
 const viewControls = ref(null)
 
 const rows = computed(() => {
-  if (!contacts.value?.data?.data) return []
+  if (
+    !contacts.value?.data?.data ||
+    !['list', 'group_by'].includes(contacts.value.data.view_type)
+  )
+    return []
   return contacts.value?.data.data.map((contact) => {
     let _rows = {}
     contacts.value?.data.rows.forEach((row) => {

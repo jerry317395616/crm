@@ -10,10 +10,10 @@
           </div>
           <div class="flex items-center gap-1">
             <Button
-              v-if="detailMode"
+              v-if="isManager() || detailMode"
               variant="ghost"
               class="w-7"
-              @click="detailMode = false"
+              @click="detailMode ? (detailMode = false) : openQuickEntryModal()"
             >
               <EditIcon class="h-4 w-4" />
             </Button>
@@ -65,7 +65,9 @@ import MoneyIcon from '@/components/Icons/MoneyIcon.vue'
 import WebsiteIcon from '@/components/Icons/WebsiteIcon.vue'
 import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import TerritoryIcon from '@/components/Icons/TerritoryIcon.vue'
+import { usersStore } from '@/stores/users'
 import { formatNumberIntoCurrency } from '@/utils'
+import { capture } from '@/telemetry'
 import { call, FeatherIcon, createResource } from 'frappe-ui'
 import { ref, nextTick, watch, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
@@ -80,6 +82,8 @@ const props = defineProps({
     },
   },
 })
+
+const { isManager } = usersStore()
 
 const router = useRouter()
 const show = defineModel()
@@ -154,7 +158,10 @@ async function callInsertDoc() {
     },
   })
   loading.value = false
-  doc.name && handleOrganizationUpdate(doc)
+  if (doc.name) {
+    capture('organization_created')
+    handleOrganizationUpdate(doc)
+  }
 }
 
 function handleOrganizationUpdate(doc, renamed = false) {
@@ -253,4 +260,13 @@ watch(
     })
   },
 )
+
+const showQuickEntryModal = defineModel('quickEntry')
+
+function openQuickEntryModal() {
+  showQuickEntryModal.value = true
+  nextTick(() => {
+    show.value = false
+  })
+}
 </script>

@@ -149,6 +149,7 @@ class CRMLead(Document):
 				"organization_name": self.organization,
 				"website": self.website,
 				"territory": self.territory,
+				"industry": self.industry,
 				"annual_revenue": self.annual_revenue,
 			}
 		)
@@ -324,16 +325,26 @@ class CRMLead(Document):
 		]
 		return {'columns': columns, 'rows': rows}
 
+	@staticmethod
+	def default_kanban_settings():
+		return {
+			"column_field": "status",
+			"title_field": "lead_name",
+			"kanban_fields": '["organization", "email", "mobile_no", "_assign", "modified"]'
+		}
+
+
 @frappe.whitelist()
 def convert_to_deal(lead, doc=None):
 	if not (doc and doc.flags.get("ignore_permissions")) and not frappe.has_permission("CRM Lead", "write", lead):
 		frappe.throw(_("Not allowed to convert Lead to Deal"), frappe.PermissionError)
 
 	lead = frappe.get_cached_doc("CRM Lead", lead)
-	lead.status = "Qualified"
+	if frappe.db.exists("CRM Lead Status", "Qualified"):
+		lead.status = "Qualified"
 	lead.converted = 1
-	if lead.sla:
-		lead.communication_status = 'Replied'
+	if lead.sla and frappe.db.exists("CRM Communication Status", "Replied"):
+		lead.communication_status = "Replied"
 	lead.save(ignore_permissions=True)
 	contact = lead.create_contact(False)
 	organization = lead.create_organization()

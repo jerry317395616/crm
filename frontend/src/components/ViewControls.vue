@@ -3,43 +3,6 @@
     v-if="isMobileView"
     class="flex flex-col justify-between gap-2 sm:px-5 px-3 py-4"
   >
-    <div class="flex items-center justify-between gap-2 overflow-x-auto">
-      <div class="flex gap-2">
-        <Dropdown :options="viewsDropdownOptions">
-          <template #default="{ open }">
-            <Button :label="__(currentView.label)">
-              <template #prefix>
-                <div v-if="isEmoji(currentView.icon)">
-                  {{ currentView.icon }}
-                </div>
-                <FeatherIcon
-                  v-else-if="typeof currentView.icon == 'string'"
-                  :name="currentView.icon"
-                  class="h-4"
-                />
-                <component v-else :is="currentView.icon" class="h-4" />
-              </template>
-              <template #suffix>
-                <FeatherIcon
-                  :name="open ? 'chevron-up' : 'chevron-down'"
-                  class="h-4 text-gray-600"
-                />
-              </template>
-            </Button>
-          </template>
-        </Dropdown>
-        <Dropdown :options="viewActions">
-          <template #default>
-            <Button icon="more-horizontal" />
-          </template>
-        </Dropdown>
-      </div>
-      <Button :label="__('Refresh')" @click="reload()" :loading="isLoading">
-        <template #icon>
-          <RefreshIcon class="h-4 w-4" />
-        </template>
-      </Button>
-    </div>
     <div class="flex flex-col gap-2">
       <div class="flex items-center justify-between gap-2 overflow-x-auto">
         <div class="flex gap-2">
@@ -59,14 +22,26 @@
         </div>
 
         <div class="flex gap-2">
+          <Button :label="__('Refresh')" @click="reload()" :loading="isLoading">
+            <template #icon>
+              <RefreshIcon class="h-4 w-4" />
+            </template>
+          </Button>
           <SortBy
+            v-if="route.params.viewType !== 'kanban'"
             v-model="list"
             :doctype="doctype"
             @update="updateSort"
             :hideLabel="isMobileView"
           />
+          <KanbanSettings
+            v-if="route.params.viewType === 'kanban'"
+            v-model="list"
+            :doctype="doctype"
+            @update="updateKanbanSettings"
+          />
           <ColumnSettings
-            v-if="!options.hideColumnsButton"
+            v-else-if="!options.hideColumnsButton"
             v-model="list"
             :doctype="doctype"
             :hideLabel="isMobileView"
@@ -84,37 +59,8 @@
     </div>
   </div>
   <div v-else class="flex items-center justify-between gap-2 px-5 py-4">
-    <div class="flex items-center gap-2">
-      <Dropdown :options="viewsDropdownOptions">
-        <template #default="{ open }">
-          <Button :label="__(currentView.label)">
-            <template #prefix>
-              <div v-if="isEmoji(currentView.icon)">{{ currentView.icon }}</div>
-              <FeatherIcon
-                v-else-if="typeof currentView.icon == 'string'"
-                :name="currentView.icon"
-                class="h-4"
-              />
-              <component v-else :is="currentView.icon" class="h-4" />
-            </template>
-            <template #suffix>
-              <FeatherIcon
-                :name="open ? 'chevron-up' : 'chevron-down'"
-                class="h-4 text-gray-600"
-              />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
-      <Dropdown :options="viewActions">
-        <template #default>
-          <Button icon="more-horizontal" />
-        </template>
-      </Dropdown>
-    </div>
-    <div class="-mr-2 h-[70%] border-l" />
     <FadedScrollableDiv
-      class="flex flex-1 items-center overflow-x-auto px-1"
+      class="flex flex-1 items-center overflow-x-auto -ml-1"
       orientation="horizontal"
     >
       <div
@@ -155,15 +101,28 @@
           :default_filters="filters"
           @update="updateFilter"
         />
-        <SortBy v-model="list" :doctype="doctype" @update="updateSort" />
+        <SortBy
+          v-if="route.params.viewType !== 'kanban'"
+          v-model="list"
+          :doctype="doctype"
+          @update="updateSort"
+        />
+        <KanbanSettings
+          v-if="route.params.viewType === 'kanban'"
+          v-model="list"
+          :doctype="doctype"
+          @update="updateKanbanSettings"
+        />
         <ColumnSettings
-          v-if="!options.hideColumnsButton"
+          v-else-if="!options.hideColumnsButton"
           v-model="list"
           :doctype="doctype"
           @update="(isDefault) => updateColumns(isDefault)"
         />
         <Dropdown
-          v-if="!options.hideColumnsButton"
+          v-if="
+            !options.hideColumnsButton && route.params.viewType !== 'kanban'
+          "
           :options="[
             {
               group: __('Options'),
@@ -203,6 +162,7 @@
       afterUpdate: () => {
         viewUpdated = false
         reloadView()
+        list.reload()
       },
     }"
   />
@@ -248,7 +208,9 @@
   </Dialog>
 </template>
 <script setup>
-import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
+import ListIcon from '@/components/Icons/ListIcon.vue'
+import KanbanIcon from '@/components/Icons/KanbanIcon.vue'
+import GroupByIcon from '@/components/Icons/GroupByIcon.vue'
 import QuickFilterField from '@/components/QuickFilterField.vue'
 import RefreshIcon from '@/components/Icons/RefreshIcon.vue'
 import EditIcon from '@/components/Icons/EditIcon.vue'
@@ -261,11 +223,18 @@ import Filter from '@/components/Filter.vue'
 import GroupBy from '@/components/GroupBy.vue'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import ColumnSettings from '@/components/ColumnSettings.vue'
+import KanbanSettings from '@/components/Kanban/KanbanSettings.vue'
 import { globalStore } from '@/stores/global'
 import { viewsStore } from '@/stores/views'
 import { usersStore } from '@/stores/users'
 import { isEmoji } from '@/utils'
-import { createResource, Dropdown, call, FeatherIcon } from 'frappe-ui'
+import {
+  createResource,
+  Dropdown,
+  call,
+  FeatherIcon,
+  usePageMeta,
+} from 'frappe-ui'
 import { computed, ref, onMounted, watch, h, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core'
@@ -312,12 +281,19 @@ function getViewType() {
   let viewType = route.params.viewType || 'list'
   let types = {
     list: {
-      label: __('List View'),
-      icon: 'list',
+      name: 'list',
+      label: __('List'),
+      icon: markRaw(ListIcon),
     },
     group_by: {
-      label: __('Group By View'),
-      icon: markRaw(DetailsIcon),
+      name: 'group_by',
+      label: __('Group By'),
+      icon: markRaw(GroupByIcon),
+    },
+    kanban: {
+      name: 'kanban',
+      label: __('Kanban'),
+      icon: markRaw(KanbanIcon),
     },
   }
 
@@ -327,9 +303,23 @@ function getViewType() {
 const currentView = computed(() => {
   let _view = getView(route.query.view, route.params.viewType, props.doctype)
   return {
+    name: _view?.name || getViewType().name,
     label:
       _view?.label || props.options?.defaultViewName || getViewType().label,
     icon: _view?.icon || getViewType().icon,
+    is_default: !_view || _view.is_default,
+  }
+})
+
+usePageMeta(() => {
+  let label = currentView.value.label
+  if (currentView.value.is_default) {
+    let routeName = route.name
+    label = `${routeName} - ${label}`
+  }
+  return {
+    title: label,
+    emoji: isEmoji(currentView.value.icon) ? currentView.value.icon : '',
   }
 })
 
@@ -340,6 +330,10 @@ const view = ref({
   icon: '',
   filters: {},
   order_by: 'modified desc',
+  column_field: 'status',
+  title_field: '',
+  kanban_columns: '',
+  kanban_fields: '',
   columns: '',
   rows: '',
   load_default_columns: false,
@@ -367,64 +361,61 @@ watch(updatedPageCount, (value) => {
 
 function getParams() {
   let _view = getView(route.query.view, route.params.viewType, props.doctype)
+  const view_name = _view?.name || ''
+  const view_type = _view?.type || route.params.viewType || 'list'
   const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
+  const group_by_field = _view?.group_by_field || 'owner'
   const columns = _view?.columns || ''
   const rows = _view?.rows || ''
+  const column_field = _view?.column_field || 'status'
+  const title_field = _view?.title_field || ''
+  const kanban_columns = _view?.kanban_columns || ''
+  const kanban_fields = _view?.kanban_fields || ''
 
-  if (_view) {
-    view.value = {
-      name: _view.name,
-      label: _view.label,
-      type: _view.type || 'list',
-      icon: _view.icon,
-      filters: _view.filters,
-      order_by: _view.order_by,
-      group_by_field: _view.group_by_field,
-      columns: _view.columns,
-      rows: _view.rows,
-      route_name: _view.route_name,
-      load_default_columns: _view.row,
-      pinned: _view.pinned,
-      public: _view.public,
-    }
-  } else {
-    view.value = {
-      name: '',
-      label: getViewType().label,
-      type: route.params.viewType || 'list',
-      icon: '',
-      filters: {},
-      order_by: 'modified desc',
-      group_by_field: 'owner',
-      columns: '',
-      rows: '',
-      route_name: route.name,
-      load_default_columns: true,
-      pinned: false,
-      public: false,
-    }
+  view.value = {
+    name: view_name,
+    label: _view?.label || getViewType().label,
+    type: view_type,
+    icon: _view?.icon || '',
+    filters: filters,
+    order_by: order_by,
+    group_by_field: group_by_field,
+    column_field: column_field,
+    title_field: title_field,
+    kanban_columns: kanban_columns,
+    kanban_fields: kanban_fields,
+    columns: columns,
+    rows: rows,
+    route_name: _view?.route_name || route.name,
+    load_default_columns: _view?.row || true,
+    pinned: _view?.pinned || false,
+    public: _view?.public || false,
   }
 
   return {
     doctype: props.doctype,
     filters: filters,
     order_by: order_by,
+    default_filters: props.filters,
+    view: {
+      custom_view_name: view_name,
+      view_type: view_type,
+      group_by_field: group_by_field,
+    },
+    column_field: column_field,
+    title_field: title_field,
+    kanban_columns: kanban_columns,
+    kanban_fields: kanban_fields,
     columns: columns,
     rows: rows,
     page_length: pageLength.value,
     page_length_count: pageLengthCount.value,
-    view: {
-      custom_view_name: _view?.name || '',
-      view_type: _view?.type || route.params.viewType || 'list',
-      group_by_field: _view?.group_by_field || 'owner',
-    },
-    default_filters: props.filters,
   }
 }
 
 list.value = createResource({
-  url: 'crm.api.doc.get_list_data',
+  url: 'crm.api.doc.get_data',
   params: getParams(),
   cache: [props.doctype, route.query.view, route.params.viewType],
   onSuccess(data) {
@@ -434,16 +425,20 @@ list.value = createResource({
       doctype: props.doctype,
       filters: params.filters,
       order_by: params.order_by,
-      page_length: params.page_length,
-      page_length_count: params.page_length_count,
-      columns: data.columns,
-      rows: data.rows,
+      default_filters: props.filters,
       view: {
         custom_view_name: cv?.name || '',
         view_type: cv?.type || route.params.viewType || 'list',
         group_by_field: params?.view?.group_by_field || 'owner',
       },
-      default_filters: props.filters,
+      column_field: data.column_field,
+      title_field: data.title_field,
+      kanban_columns: data.kanban_columns,
+      kanban_fields: data.kanban_fields,
+      columns: data.columns,
+      rows: data.rows,
+      page_length: params.page_length,
+      page_length_count: params.page_length_count,
     }
   },
 })
@@ -481,18 +476,31 @@ let allowedViews = props.options.allowedViews || ['list']
 
 if (allowedViews.includes('list')) {
   defaultViews.push({
-    label: __(props.options?.defaultViewName) || __('List View'),
-    icon: 'list',
+    name: 'list',
+    label: __(props.options?.defaultViewName) || __('List'),
+    icon: markRaw(ListIcon),
     onClick() {
       viewUpdated.value = false
       router.push({ name: route.name })
     },
   })
 }
+if (allowedViews.includes('kanban')) {
+  defaultViews.push({
+    name: 'kanban',
+    label: __(props.options?.defaultViewName) || __('Kanban'),
+    icon: markRaw(KanbanIcon),
+    onClick() {
+      viewUpdated.value = false
+      router.push({ name: route.name, params: { viewType: 'kanban' } })
+    },
+  })
+}
 if (allowedViews.includes('group_by')) {
   defaultViews.push({
-    label: __(props.options?.defaultViewName) || __('Group By View'),
-    icon: markRaw(DetailsIcon),
+    name: 'group_by',
+    label: __(props.options?.defaultViewName) || __('Group By'),
+    icon: markRaw(GroupByIcon),
     onClick() {
       viewUpdated.value = false
       router.push({ name: route.name, params: { viewType: 'group_by' } })
@@ -504,9 +512,11 @@ function getIcon(icon, type) {
   if (isEmoji(icon)) {
     return h('div', icon)
   } else if (!icon && type === 'group_by') {
-    return markRaw(DetailsIcon)
+    return markRaw(GroupByIcon)
+  } else if (!icon && type === 'kanban') {
+    return markRaw(KanbanIcon)
   }
-  return icon || 'list'
+  return icon || markRaw(ListIcon)
 }
 
 const viewsDropdownOptions = computed(() => {
@@ -520,6 +530,7 @@ const viewsDropdownOptions = computed(() => {
 
   if (list.value?.data?.views) {
     list.value.data.views.forEach((view) => {
+      view.name = view.name
       view.label = __(view.label)
       view.type = view.type || 'list'
       view.icon = getIcon(view.icon, view.type)
@@ -538,20 +549,19 @@ const viewsDropdownOptions = computed(() => {
     })
     let publicViews = list.value.data.views.filter((v) => v.public)
     let savedViews = list.value.data.views.filter(
-      (v) => !v.pinned && !v.public && !v.is_default
+      (v) => !v.pinned && !v.public && !v.is_default,
     )
     let pinnedViews = list.value.data.views.filter((v) => v.pinned)
-
-    publicViews.length &&
-      _views.push({
-        group: __('Public Views'),
-        items: publicViews,
-      })
 
     savedViews.length &&
       _views.push({
         group: __('Saved Views'),
         items: savedViews,
+      })
+    publicViews.length &&
+      _views.push({
+        group: __('Public Views'),
+        items: publicViews,
       })
     pinnedViews.length &&
       _views.push({
@@ -559,6 +569,18 @@ const viewsDropdownOptions = computed(() => {
         items: pinnedViews,
       })
   }
+
+  _views.push({
+    group: __('Actions'),
+    hideLabel: true,
+    items: [
+      {
+        label: __('Create View'),
+        icon: 'plus',
+        onClick: () => createView(),
+      },
+    ],
+  })
 
   return _views
 })
@@ -576,7 +598,7 @@ const quickFilterList = computed(() => {
       if (Array.isArray(value)) {
         if (
           (['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(
-            filter.type
+            filter.type,
           ) &&
             value[0]?.toLowerCase() == 'like') ||
           value[0]?.toLowerCase() != 'like'
@@ -695,6 +717,87 @@ function updateColumns(obj) {
   }
 }
 
+async function updateKanbanSettings(data) {
+  if (data.item && data.to) {
+    await call('frappe.client.set_value', {
+      doctype: props.doctype,
+      name: data.item,
+      fieldname: view.value.column_field,
+      value: data.to,
+    })
+  }
+  let isDirty = viewUpdated.value
+
+  viewUpdated.value = true
+  if (!defaultParams.value) {
+    defaultParams.value = getParams()
+  }
+  list.value.params = defaultParams.value
+  if (data.kanban_columns) {
+    list.value.params.kanban_columns = data.kanban_columns
+    view.value.kanban_columns = data.kanban_columns
+  }
+  if (data.kanban_fields) {
+    list.value.params.kanban_fields = data.kanban_fields
+    view.value.kanban_fields = data.kanban_fields
+  }
+  if (data.column_field && data.column_field != view.value.column_field) {
+    list.value.params.column_field = data.column_field
+    view.value.column_field = data.column_field
+    list.value.params.kanban_columns = ''
+    view.value.kanban_columns = ''
+  }
+  if (data.title_field && data.title_field != view.value.title_field) {
+    list.value.params.title_field = data.title_field
+    view.value.title_field = data.title_field
+  }
+
+  list.value.reload()
+
+  if (!route.query.view) {
+    create_or_update_default_view()
+  } else if (!data.column_field) {
+    if (isDirty) {
+      $dialog({
+        title: __('Unsaved Changes'),
+        message: __('You have unsaved changes. Do you want to save them?'),
+        variant: 'danger',
+        actions: [
+          {
+            label: __('Update'),
+            variant: 'solid',
+            onClick: (close) => {
+              update_custom_view()
+              close()
+            },
+          },
+        ],
+      })
+    } else {
+      update_custom_view()
+    }
+  }
+}
+
+function loadMoreKanban(columnName) {
+  let columns = list.value.data.kanban_columns || '[]'
+
+  if (typeof columns === 'string') {
+    columns = JSON.parse(columns)
+  }
+
+  let column = columns.find((c) => c.name == columnName)
+
+  if (!column.page_length) {
+    column.page_length = 40
+  } else {
+    column.page_length += 20
+  }
+  list.value.params.kanban_columns = columns
+  view.value.kanban_columns = columns
+  list.value.reload()
+}
+
 function create_or_update_default_view() {
   if (route.query.view) return
   view.value.doctype = props.doctype
@@ -702,7 +805,7 @@ function create_or_update_default_view() {
     'crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_default_view',
     {
       view: view.value,
-    }
+    },
   ).then(() => {
     reloadView()
     view.value = {
@@ -712,7 +815,11 @@ function create_or_update_default_view() {
       name: view.value.name,
       filters: defaultParams.value.filters,
       order_by: defaultParams.value.order_by,
-      group_by_field: defaultParams.value.view.group_by_field,
+      group_by_field: defaultParams.value.view?.group_by_field,
+      column_field: defaultParams.value.column_field,
+      title_field: defaultParams.value.title_field,
+      kanban_columns: defaultParams.value.kanban_columns,
+      kanban_fields: defaultParams.value.kanban_fields,
       columns: defaultParams.value.columns,
       rows: defaultParams.value.rows,
       route_name: route.name,
@@ -720,6 +827,31 @@ function create_or_update_default_view() {
     }
     viewUpdated.value = false
   })
+}
+
+function update_custom_view() {
+  viewUpdated.value = false
+  view.value = {
+    doctype: props.doctype,
+    label: view.value.label,
+    type: view.value.type || 'list',
+    icon: view.value.icon,
+    name: view.value.name,
+    filters: defaultParams.value.filters,
+    order_by: defaultParams.value.order_by,
+    group_by_field: defaultParams.value.view.group_by_field,
+    column_field: defaultParams.value.column_field,
+    title_field: defaultParams.value.title_field,
+    kanban_columns: defaultParams.value.kanban_columns,
+    kanban_fields: defaultParams.value.kanban_fields,
+    columns: defaultParams.value.columns,
+    rows: defaultParams.value.rows,
+    route_name: route.name,
+    load_default_columns: view.value.load_default_columns,
+  }
+  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.update', {
+    view: view.value,
+  }).then(() => reloadView())
 }
 
 function updatePageLength(value, loadMore = false) {
@@ -742,7 +874,10 @@ function updatePageLength(value, loadMore = false) {
 }
 
 // View Actions
-const viewActions = computed(() => {
+const viewActions = (view) => {
+  let isDefault = typeof view.name === 'string'
+  let _view = getView(view.name)
+
   let actions = [
     {
       group: __('Default Views'),
@@ -751,37 +886,36 @@ const viewActions = computed(() => {
         {
           label: __('Duplicate'),
           icon: () => h(DuplicateIcon, { class: 'h-4 w-4' }),
-          onClick: () => duplicateView(),
+          onClick: () => duplicateView(_view),
         },
       ],
     },
   ]
 
-  if (route.query.view && (!view.value.public || isManager())) {
+  if (!isDefault && (!_view.public || isManager())) {
     actions[0].items.push({
       label: __('Edit'),
       icon: () => h(EditIcon, { class: 'h-4 w-4' }),
-      onClick: () => editView(),
+      onClick: () => editView(_view),
     })
 
-    if (!view.value.public) {
+    if (!_view.public) {
       actions[0].items.push({
-        label: view.value.pinned ? __('Unpin View') : __('Pin View'),
-        icon: () =>
-          h(view.value.pinned ? UnpinIcon : PinIcon, { class: 'h-4 w-4' }),
-        onClick: () => pinView(),
+        label: _view.pinned ? __('Unpin View') : __('Pin View'),
+        icon: () => h(_view.pinned ? UnpinIcon : PinIcon, { class: 'h-4 w-4' }),
+        onClick: () => pinView(_view),
       })
     }
 
     if (isManager()) {
       actions[0].items.push({
-        label: view.value.public ? __('Make Private') : __('Make Public'),
+        label: _view.public ? __('Make Private') : __('Make Public'),
         icon: () =>
           h(FeatherIcon, {
-            name: view.value.public ? 'lock' : 'unlock',
+            name: _view.public ? 'lock' : 'unlock',
             class: 'h-4 w-4',
           }),
-        onClick: () => publicView(),
+        onClick: () => publicView(_view),
       })
     }
 
@@ -795,14 +929,16 @@ const viewActions = computed(() => {
           onClick: () =>
             $dialog({
               title: __('Delete View'),
-              message: __('Are you sure you want to delete this view?'),
+              message: __('Are you sure you want to delete "{0}" view?', [
+                _view.label,
+              ]),
               variant: 'danger',
               actions: [
                 {
                   label: __('Delete'),
                   variant: 'solid',
                   theme: 'red',
-                  onClick: (close) => deleteView(close),
+                  onClick: (close) => deleteView(_view, close),
                 },
               ],
             }),
@@ -811,56 +947,61 @@ const viewActions = computed(() => {
     })
   }
   return actions
-})
+}
 
 const viewModalObj = ref({})
 
-function duplicateView() {
-  let label =
-    __(
-      getView(route.query.view, route.params.viewType, props.doctype)?.label
-    ) || getViewType().label
+function createView() {
   view.value.name = ''
-  view.value.label = label + __(' (New)')
+  view.value.label = ''
+  view.value.icon = ''
   viewModalObj.value = view.value
+  viewModalObj.value.mode = 'create'
   showViewModal.value = true
 }
 
-function editView() {
-  let cView = getView(route.query.view, route.params.viewType, props.doctype)
-  view.value.name = route.query.view
-  view.value.label = __(cView?.label) || getViewType().label
-  view.value.icon = cView?.icon || ''
-  viewModalObj.value = view.value
+function duplicateView(v) {
+  v.label = v.label + __(' (New)')
+  viewModalObj.value = v
+  viewModalObj.value.mode = 'duplicate'
   showViewModal.value = true
 }
 
-function publicView() {
+function editView(v) {
+  viewModalObj.value = v
+  viewModalObj.value.mode = 'edit'
+  showViewModal.value = true
+}
+
+function publicView(v) {
   call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.public', {
-    name: route.query.view,
-    value: !view.value.public,
+    name: v.name,
+    value: !v.public,
   }).then(() => {
-    view.value.public = !view.value.public
+    v.public = !v.public
     reloadView()
+    list.value.reload()
   })
 }
 
-function pinView() {
+function pinView(v) {
   call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin', {
-    name: route.query.view,
-    value: !view.value.pinned,
+    name: v.name,
+    value: !v.pinned,
   }).then(() => {
-    view.value.pinned = !view.value.pinned
+    v.pinned = !v.pinned
     reloadView()
+    list.value.reload()
   })
 }
 
-function deleteView(close) {
+function deleteView(v, close) {
   call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete', {
-    name: route.query.view,
+    name: v.name,
   }).then(() => {
     router.push({ name: route.name })
     reloadView()
+    list.value.reload()
   })
   close()
 }
@@ -879,12 +1020,17 @@ function saveView() {
     filters: defaultParams.value.filters,
     order_by: defaultParams.value.order_by,
     group_by_field: defaultParams.value.view.group_by_field,
+    column_field: defaultParams.value.column_field,
+    title_field: defaultParams.value.title_field,
+    kanban_columns: defaultParams.value.kanban_columns,
+    kanban_fields: defaultParams.value.kanban_fields,
     columns: defaultParams.value.columns,
     rows: defaultParams.value.rows,
     route_name: route.name,
     load_default_columns: view.value.load_default_columns,
   }
   viewModalObj.value = view.value
+  viewModalObj.value.mode = 'edit'
   showViewModal.value = true
 }
 
@@ -939,7 +1085,16 @@ function likeDoc({ name, liked }) {
   })
 }
 
-defineExpose({ applyFilter, applyLikeFilter, likeDoc })
+defineExpose({
+  applyFilter,
+  applyLikeFilter,
+  likeDoc,
+  updateKanbanSettings,
+  loadMoreKanban,
+  viewActions,
+  viewsDropdownOptions,
+  currentView,
+})
 
 // Watchers
 watch(
@@ -948,7 +1103,7 @@ watch(
     if (_.isEqual(value, old_value)) return
     reload()
   },
-  { deep: true }
+  { deep: true },
 )
 
 watch([() => route, () => route.params.viewType], (value, old_value) => {

@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="reply?.message"
-    class="flex items-center justify-around gap-2 px-4 pt-2 sm:px-10"
+    class="flex items-center justify-around gap-2 px-3 pt-2 sm:px-10"
   >
     <div
       class="mb-1 ml-13 flex-1 cursor-pointer rounded border-0 border-l-4 border-green-500 bg-gray-100 p-2 text-base text-gray-600"
@@ -18,7 +18,7 @@
 
     <Button variant="ghost" icon="x" @click="reply = {}" />
   </div>
-  <div class="flex items-end gap-2 px-4 py-2.5 sm:px-10" v-bind="$attrs">
+  <div class="flex items-end gap-2 px-3 py-2.5 sm:px-10" v-bind="$attrs">
     <div class="flex h-8 items-center gap-2">
       <FileUploader @success="(file) => uploadFile(file)">
         <template v-slot="{ openFileSelector }">
@@ -39,6 +39,7 @@
           () => {
             content += emoji
             $refs.textarea.$el.focus()
+            capture('whatsapp_emoji_added')
           }
         "
       >
@@ -65,8 +66,8 @@
 <script setup>
 import IconPicker from '@/components/IconPicker.vue'
 import SmileIcon from '@/components/Icons/SmileIcon.vue'
+import { capture } from '@/telemetry'
 import { createResource, Textarea, FileUploader, Dropdown } from 'frappe-ui'
-import FeatherIcon from 'frappe-ui/src/components/FeatherIcon.vue'
 import { ref, nextTick, watch } from 'vue'
 
 const props = defineProps({
@@ -92,6 +93,7 @@ function uploadFile(file) {
   whatsapp.value.attach = file.file_url
   whatsapp.value.content_type = fileType.value
   sendWhatsAppMessage()
+  capture('whatsapp_upload_file')
 }
 
 function sendTextMessage(event) {
@@ -99,6 +101,7 @@ function sendTextMessage(event) {
   sendWhatsAppMessage()
   textarea.value.$el.blur()
   content.value = ''
+  capture('whatsapp_send_message')
 }
 
 async function sendWhatsAppMessage() {

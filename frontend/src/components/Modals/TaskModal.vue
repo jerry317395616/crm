@@ -118,8 +118,9 @@ import UserAvatar from '@/components/UserAvatar.vue'
 import Link from '@/components/Controls/Link.vue'
 import { taskStatusOptions, taskPriorityOptions } from '@/utils'
 import { usersStore } from '@/stores/users'
+import { capture } from '@/telemetry'
 import { TextEditor, Dropdown, Tooltip, call, DateTimePicker } from 'frappe-ui'
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -178,7 +179,7 @@ function redirect() {
 
 async function updateTask() {
   if (!_task.value.assigned_to) {
-    _task.value.assigned_to = getUser().email
+    _task.value.assigned_to = getUser().name
   }
   if (_task.value.name) {
     let d = await call('frappe.client.set_value', {
@@ -199,26 +200,30 @@ async function updateTask() {
       },
     })
     if (d.name) {
+      capture('task_created')
       tasks.value.reload()
     }
   }
   show.value = false
 }
 
-watch(
-  () => show.value,
-  (value) => {
-    if (!value) return
-    editMode.value = false
-    nextTick(() => {
-      title.value.el.focus()
-      _task.value = { ...props.task }
-      if (_task.value.title) {
-        editMode.value = true
-      }
-    })
-  }
-)
+function render() {
+  editMode.value = false
+  nextTick(() => {
+    title.value?.el?.focus?.()
+    _task.value = { ...props.task }
+    if (_task.value.title) {
+      editMode.value = true
+    }
+  })
+}
+
+onMounted(() => show.value && render())
+
+watch(show, (value) => {
+  if (!value) return
+  render()
+})
 </script>
 
 <style scoped>

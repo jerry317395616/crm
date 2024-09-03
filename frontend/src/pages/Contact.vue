@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader v-if="contact.data">
     <template #left-header>
-      <Breadcrumbs :items="breadcrumbs" />
+      <Breadcrumbs :items="breadcrumbs">
+        <template #prefix="{ item }">
+          <Icon v-if="item.icon" :icon="item.icon" class="mr-2 h-4" />
+        </template>
+      </Breadcrumbs>
     </template>
   </LayoutHeader>
   <div v-if="contact.data" class="flex h-full flex-col overflow-hidden">
@@ -64,7 +68,7 @@
                 v-if="contact.data.email_id"
                 class="flex items-center gap-1.5"
               >
-                <EmailIcon class="h-4 w-4" />
+                <Email2Icon class="h-4 w-4" />
                 <span class="">{{ contact.data.email_id }}</span>
               </div>
               <span
@@ -204,12 +208,41 @@
   </div>
   <ContactModal
     v-model="showContactModal"
+    v-model:quickEntry="showQuickEntryModal"
     :contact="contact"
     :options="{ detailMode }"
+  />
+  <QuickEntryModal
+    v-if="showQuickEntryModal"
+    v-model="showQuickEntryModal"
+    doctype="Contact"
   />
 </template>
 
 <script setup>
+import Icon from '@/components/Icon.vue'
+import Dropdown from '@/components/frappe-ui/Dropdown.vue'
+import LayoutHeader from '@/components/LayoutHeader.vue'
+import Email2Icon from '@/components/Icons/Email2Icon.vue'
+import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+import EditIcon from '@/components/Icons/EditIcon.vue'
+import CameraIcon from '@/components/Icons/CameraIcon.vue'
+import DealsIcon from '@/components/Icons/DealsIcon.vue'
+import DealsListView from '@/components/ListViews/DealsListView.vue'
+import ContactModal from '@/components/Modals/ContactModal.vue'
+import QuickEntryModal from '@/components/Settings/QuickEntryModal.vue'
+import {
+  dateFormat,
+  dateTooltipFormat,
+  timeAgo,
+  formatNumberIntoCurrency,
+} from '@/utils'
+import { getView } from '@/utils/view'
+import { globalStore } from '@/stores/global.js'
+import { usersStore } from '@/stores/users.js'
+import { organizationsStore } from '@/stores/organizations.js'
+import { statusesStore } from '@/stores/statuses'
+import { callEnabled } from '@/composables/settings'
 import {
   Breadcrumbs,
   Avatar,
@@ -218,29 +251,10 @@ import {
   Tabs,
   call,
   createResource,
+  usePageMeta,
 } from 'frappe-ui'
-import Dropdown from '@/components/frappe-ui/Dropdown.vue'
-import LayoutHeader from '@/components/LayoutHeader.vue'
-import EmailIcon from '@/components/Icons/EmailIcon.vue'
-import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
-import EditIcon from '@/components/Icons/EditIcon.vue'
-import CameraIcon from '@/components/Icons/CameraIcon.vue'
-import DealsIcon from '@/components/Icons/DealsIcon.vue'
-import DealsListView from '@/components/ListViews/DealsListView.vue'
-import ContactModal from '@/components/Modals/ContactModal.vue'
-import {
-  dateFormat,
-  dateTooltipFormat,
-  timeAgo,
-  formatNumberIntoCurrency,
-} from '@/utils'
-import { globalStore } from '@/stores/global.js'
-import { usersStore } from '@/stores/users.js'
-import { organizationsStore } from '@/stores/organizations.js'
-import { statusesStore } from '@/stores/statuses'
-import { callEnabled } from '@/composables/settings'
 import { ref, computed, h } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const { $dialog, makeCall } = globalStore()
 
@@ -255,18 +269,58 @@ const props = defineProps({
   },
 })
 
+const route = useRoute()
 const router = useRouter()
 
 const showContactModal = ref(false)
+const showQuickEntryModal = ref(false)
 const detailMode = ref(false)
+
+const contact = createResource({
+  url: 'crm.api.contact.get_contact',
+  cache: ['contact', props.contactId],
+  params: {
+    name: props.contactId,
+  },
+  auto: true,
+  transform: (data) => {
+    return {
+      ...data,
+      actual_mobile_no: data.mobile_no,
+      mobile_no: data.mobile_no,
+    }
+  },
+})
 
 const breadcrumbs = computed(() => {
   let items = [{ label: __('Contacts'), route: { name: 'Contacts' } }]
+
+  if (route.query.view || route.query.viewType) {
+    let view = getView(route.query.view, route.query.viewType, 'Contact')
+    if (view) {
+      items.push({
+        label: __(view.label),
+        icon: view.icon,
+        route: {
+          name: 'Contacts',
+          params: { viewType: route.query.viewType },
+          query: { view: route.query.view },
+        },
+      })
+    }
+  }
+
   items.push({
     label: contact.data?.full_name,
     route: { name: 'Contact', params: { contactId: props.contactId } },
   })
   return items
+})
+
+usePageMeta(() => {
+  return {
+    title: contact.data?.full_name || contact.data?.name,
+  }
 })
 
 function validateFile(file) {
@@ -316,22 +370,6 @@ const tabs = [
     count: computed(() => deals.data?.length),
   },
 ]
-
-const contact = createResource({
-  url: 'crm.api.contact.get_contact',
-  cache: ['contact', props.contactId],
-  params: {
-    name: props.contactId,
-  },
-  auto: true,
-  transform: (data) => {
-    return {
-      ...data,
-      actual_mobile_no: data.mobile_no,
-      mobile_no: data.mobile_no,
-    }
-  },
-})
 
 const deals = createResource({
   url: 'crm.api.contact.get_linked_deals',

@@ -36,6 +36,7 @@
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
+import { capture } from '@/telemetry'
 import { FormControl, call, createResource, TextEditor, DatePicker } from 'frappe-ui'
 import { ref, computed, onMounted, h } from 'vue'
 
@@ -52,7 +53,7 @@ const props = defineProps({
     required: true,
   },
   selectedValues: {
-    type: Array,
+    type: Set,
     required: true,
   },
 })
@@ -67,6 +68,9 @@ const fields = createResource({
   params: {
     doctype: props.doctype,
   },
+  transform: (data) => {
+    return data.filter((f) => f.hidden == 0 && f.read_only == 0)
+  }
 })
 
 onMounted(() => {
@@ -112,6 +116,7 @@ function updateValues() {
     newValue.value = ''
     loading.value = false
     show.value = false
+    capture('bulk_update', { doctype: props.doctype })
     emit('reload')
   })
 }

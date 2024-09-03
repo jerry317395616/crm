@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader v-if="deal.data">
     <template #left-header>
-      <Breadcrumbs :items="breadcrumbs" />
+      <Breadcrumbs :items="breadcrumbs">
+        <template #prefix="{ item }">
+          <Icon v-if="item.icon" :icon="item.icon" class="mr-2 h-4" />
+        </template>
+      </Breadcrumbs>
     </template>
     <template #right-header>
       <CustomActions
@@ -77,7 +81,7 @@
             </Tooltip>
             <Tooltip :text="__('Send an email')">
               <Button class="h-7 w-7">
-                <EmailIcon
+                <Email2Icon
                   class="h-4 w-4"
                   @click="
                     deal.data.email
@@ -146,6 +150,16 @@
                     </template>
                   </Link>
                 </div>
+                <Button
+                  v-else-if="
+                    ((!section.contacts && i == 1) || i == 0) && isManager()
+                  "
+                  variant="ghost"
+                  class="w-7 mr-2"
+                  @click="showSidePanelModal = true"
+                >
+                  <EditIcon class="h-4 w-4" />
+                </Button>
               </template>
               <SectionFields
                 v-if="section.fields"
@@ -164,8 +178,8 @@
                   <span>{{ __('Loading...') }}</span>
                 </div>
                 <div
-                  v-else-if="section.contacts.length"
-                  v-for="(contact, i) in section.contacts"
+                  v-else-if="deal_contacts?.data?.length"
+                  v-for="(contact, i) in deal_contacts.data"
                   :key="contact.name"
                 >
                   <div
@@ -230,7 +244,7 @@
                         class="flex flex-col gap-1.5 text-base text-gray-800"
                       >
                         <div class="flex items-center gap-3 pb-1.5 pl-1 pt-4">
-                          <EmailIcon class="h-4 w-4" />
+                          <Email2Icon class="h-4 w-4" />
                           {{ contact.email }}
                         </div>
                         <div class="flex items-center gap-3 p-1 py-1.5">
@@ -241,7 +255,7 @@
                     </Section>
                   </div>
                   <div
-                    v-if="i != section.contacts.length - 1"
+                    v-if="i != deal_contacts.data.length - 1"
                     class="mx-2 h-px border-t border-gray-200"
                   />
                 </div>
@@ -278,18 +292,27 @@
     }"
   />
   <AssignmentModal
-    v-if="deal.data"
-    :doc="deal.data"
-    doctype="CRM Deal"
+    v-if="showAssignmentModal"
     v-model="showAssignmentModal"
     v-model:assignees="deal.data._assignedTo"
+    :doc="deal.data"
+    doctype="CRM Deal"
+  />
+  <SidePanelModal
+    v-if="showSidePanelModal"
+    v-model="showSidePanelModal"
+    doctype="CRM Deal"
+    @reload="() => fieldsLayout.reload()"
   />
 </template>
 <script setup>
+import Icon from '@/components/Icon.vue'
 import Resizer from '@/components/Resizer.vue'
 import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
+import EditIcon from '@/components/Icons/EditIcon.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import Email2Icon from '@/components/Icons/Email2Icon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
@@ -300,11 +323,12 @@ import LinkIcon from '@/components/Icons/LinkIcon.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import SuccessIcon from '@/components/Icons/SuccessIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
-import Activities from '@/components/Activities.vue'
+import Activities from '@/components/Activities/Activities.vue'
 import OrganizationModal from '@/components/Modals/OrganizationModal.vue'
 import AssignmentModal from '@/components/Modals/AssignmentModal.vue'
 import MultipleAvatar from '@/components/MultipleAvatar.vue'
 import ContactModal from '@/components/Modals/ContactModal.vue'
+import SidePanelModal from '@/components/Settings/SidePanelModal.vue'
 import Link from '@/components/Controls/Link.vue'
 import Section from '@/components/Section.vue'
 import SectionFields from '@/components/SectionFields.vue'
@@ -318,9 +342,11 @@ import {
   errorMessage,
   copyToClipboard,
 } from '@/utils'
+import { getView } from '@/utils/view'
 import { globalStore } from '@/stores/global'
 import { organizationsStore } from '@/stores/organizations'
 import { statusesStore } from '@/stores/statuses'
+import { usersStore } from '@/stores/users'
 import { whatsappEnabled, callEnabled } from '@/composables/settings'
 import {
   createResource,
@@ -330,13 +356,16 @@ import {
   Tabs,
   Breadcrumbs,
   call,
+  usePageMeta,
 } from 'frappe-ui'
 import { ref, computed, h, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const { $dialog, makeCall } = globalStore()
 const { organizations, getOrganization } = organizationsStore()
 const { statusOptions, getDealStatus } = statusesStore()
+const { isManager } = usersStore()
+const route = useRoute()
 const router = useRouter()
 
 const props = defineProps({
@@ -372,6 +401,7 @@ onMounted(() => {
 const reload = ref(false)
 const showOrganizationModal = ref(false)
 const showAssignmentModal = ref(false)
+const showSidePanelModal = ref(false)
 const _organization = ref({})
 
 const organization = computed(() => {
@@ -429,11 +459,33 @@ function validateRequired(fieldname, value) {
 
 const breadcrumbs = computed(() => {
   let items = [{ label: __('Deals'), route: { name: 'Deals' } }]
+
+  if (route.query.view || route.query.viewType) {
+    let view = getView(route.query.view, route.query.viewType, 'CRM Deal')
+    if (view) {
+      items.push({
+        label: __(view.label),
+        icon: view.icon,
+        route: {
+          name: 'Deals',
+          params: { viewType: route.query.viewType },
+          query: { view: route.query.view },
+        },
+      })
+    }
+  }
+
   items.push({
     label: organization.value?.name || __('Untitled'),
     route: { name: 'Deal', params: { dealId: deal.data.name } },
   })
   return items
+})
+
+usePageMeta(() => {
+  return {
+    title: organization.value?.name || deal.data?.name,
+  }
 })
 
 const tabIndex = ref(0)
@@ -582,22 +634,11 @@ const deal_contacts = createResource({
   params: { name: props.dealId },
   cache: ['deal_contacts', props.dealId],
   auto: true,
-  onSuccess: (data) => {
-    let contactSection = fieldsLayout.data?.find(
-      (section) => section.name == 'contacts_section',
-    )
-    if (!contactSection) return
-    contactSection.contacts = data.map((contact) => {
-      return {
-        name: contact.name,
-        full_name: contact.full_name,
-        email: contact.email,
-        mobile_no: contact.mobile_no,
-        image: contact.image,
-        is_primary: contact.is_primary,
-        opened: false,
-      }
+  transform: (data) => {
+    data.forEach((contact) => {
+      contact.opened = false
     })
+    return data
   },
 })
 
